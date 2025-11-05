@@ -2,16 +2,16 @@ package api
 
 import (
 	"github.com/1batu/market-ai/internal/config"
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 )
 
-// NewServer Fiber HTTP server oluşturur ve middleware'leri ekler
 func NewServer(cfg *config.Config) *fiber.App {
 	app := fiber.New(fiber.Config{
-		AppName:      "Market AI v0.1",
+		AppName:      "Market AI v0.2",
 		ErrorHandler: errorHandler,
 	})
 
@@ -22,6 +22,14 @@ func NewServer(cfg *config.Config) *fiber.App {
 		AllowMethods: "GET,POST,PUT,DELETE",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
+
+	app.Use("/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
 
 	return app
 }

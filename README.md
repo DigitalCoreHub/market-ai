@@ -1,53 +1,28 @@
-<div align="center">
-
 # 🤖 Market AI
 
-### *Türkiye'nin ilk yapay zekâ destekli finans simülasyon arenası*
-
-</div>
-
----
-
-## 📖 Proje Hakkında
-
-**Market AI**, finansal piyasalarda yapay zekâ ajanlarının (AI agents) birbirleriyle rekabet ettiği, tamamen otonom karar verme sistemlerine dayalı bir **trading simülasyon platformudur**.
-
-### 🎯 Amaç
-
-Farklı yapay zekâ modellerinin (GPT-4, Claude, Qwen vb.) aynı veri seti üzerinde nasıl kararlar aldığını, hangi stratejilerle daha başarılı olduklarını ve piyasaya nasıl tepki verdiklerini gözlemlemek.
+### _Türkiye'nin ilk yapay zekâ destekli finans simülasyon arenası_
 
 > **"AI'lar Borsa İstanbul'da yarışsaydı kim kazanırdı?"**
 
 ---
 
-## 🏗️ Mimari
+## 📖 Proje Hakkında
 
-```
-┌─────────────────────────────────────────────────┐
-│          Frontend (Next.js + Tailwind)          │
-│        Real-time Dashboard & Visualizations     │
-└───────────────────┬─────────────────────────────┘
-                    │ REST API + WebSocket
-┌───────────────────▼─────────────────────────────┐
-│           Backend (Go + Fiber)                  │
-│  ┌────────────────────────────────────────┐    │
-│  │  Agent Manager (Goroutine Pool)        │    │
-│  │  Trading Simulator (BIST Rules)        │    │
-│  │  Market Data Provider                  │    │
-│  │  AI Integration Layer                  │    │
-│  └────────────────────────────────────────┘    │
-└───────────┬─────────────────┬───────────────────┘
-            │                 │
-┌───────────▼─────┐   ┌──────▼──────┐
-│   PostgreSQL    │   │    Redis    │
-│  (Persistent)   │   │   (Cache)   │
-└─────────────────┘   └─────────────┘
-```
+Market AI, finansal piyasalarda yapay zekâ ajanlarının (AI agents) farklı stratejilerle nasıl kararlar aldığını gözlemlemeyi amaçlayan, deneysel bir simülasyon ve test projesidir.
+
+## 🎯 Amaç
+
+- Farklı AI modellerini aynı veri/koşullarda karşılaştırmak
+- Stratejilerin performansını ve karar alma dinamiklerini analiz etmek
+- Backend altyapısını (API, DB, Cache) doğrulamak ve ölçümlemek
+
+## 🧭 Ne İçin Kullanılır?
+
+- Test/araştırma amaçlı simülasyonlar ve kıyaslamalar
+- Geliştirme ortamında sağlık kontrolleri (health, ping)
+
+## ⚠️ Uyarı
+
+Bu proje yalnızca deneysel ve eğitim/test amaçlıdır. Buradaki hiçbir çıktı, sinyal veya metrik yatırım tavsiyesi değildir; finansal kararlar için kullanılmamalıdır.
 
 ---
-
-<div align="center">
-
-**Developed with ❤️ by Digital Core Hub**
-
-</div>

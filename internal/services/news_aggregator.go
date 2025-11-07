@@ -145,7 +145,7 @@ func (na *NewsAggregator) storeArticle(ctx context.Context, article models.NewsA
 			title, description, content, source, url,
 			event_type, related_stocks, published_at, fetched_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-		ON CONFLICT (url) DO NOTHING
+		ON CONFLICT DO NOTHING
 	`
 
 	_, err := na.db.Exec(ctx, query,

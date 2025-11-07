@@ -77,13 +77,16 @@ BEGIN
     SET executed = TRUE,
         trade_id = NEW.id,
         outcome = 'success'
-    WHERE agent_id = NEW.agent_id
-      AND stock_symbol = NEW.stock_symbol
-      AND decision = NEW.trade_type
-      AND executed = FALSE
-      AND created_at >= NOW() - INTERVAL '5 minutes'
-    ORDER BY created_at DESC
-    LIMIT 1;
+    WHERE id = (
+        SELECT id FROM agent_decisions
+        WHERE agent_id = NEW.agent_id
+          AND stock_symbol = NEW.stock_symbol
+          AND decision = NEW.trade_type
+          AND executed = FALSE
+          AND created_at >= NOW() - INTERVAL '5 minutes'
+        ORDER BY created_at DESC
+        LIMIT 1
+    );
 
     RETURN NEW;
 END;

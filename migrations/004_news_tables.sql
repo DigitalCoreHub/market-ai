@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS market_events (
     -- Meta information
     source VARCHAR(100) NOT NULL,    -- 'Bloomberg HT', 'Investing.com', 'News API'
     url TEXT,                        -- Article URL
+    content_hash VARCHAR(64),        -- MD5 hash of title+description for dedup
 
     -- Categorization
     event_type VARCHAR(50) DEFAULT 'news' CHECK (event_type IN ('news', 'economic_data', 'earnings', 'policy')),
@@ -42,8 +43,11 @@ CREATE INDEX idx_events_source ON market_events(source);
 CREATE INDEX idx_events_type ON market_events(event_type);
 CREATE INDEX idx_events_category ON market_events(category);
 
--- Unique constraint on URL to prevent duplicates
+-- Unique constraint on non-null URL to prevent duplicates
 CREATE UNIQUE INDEX idx_events_url ON market_events(url) WHERE url IS NOT NULL;
+
+-- Simple: just use content_hash with no WHERE clause for ON CONFLICT
+ALTER TABLE market_events ADD CONSTRAINT unique_content_hash UNIQUE NULLS NOT DISTINCT (content_hash);
 
 -- Function to cleanup old news (keep only last 7 days)
 CREATE OR REPLACE FUNCTION cleanup_old_news()

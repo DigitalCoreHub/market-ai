@@ -11,6 +11,8 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	Log      LogConfig
+	News     NewsConfig
+	AI       AIConfig
 }
 
 type ServerConfig struct {
@@ -36,6 +38,24 @@ type RedisConfig struct {
 
 type LogConfig struct {
 	Level string
+}
+
+// NewsConfig v0.3 news aggregation configuration
+type NewsConfig struct {
+	APIKey         string
+	UpdateInterval int    // minutes
+	CacheTTL       int    // minutes
+	Feeds          string // comma-separated RSS feeds
+}
+
+// AIConfig v0.3 AI integration configuration
+type AIConfig struct {
+	OpenAIKey    string
+	AnthropicKey string
+	GPTModel     string
+	ClaudeModel  string
+	Temperature  float64
+	MaxTokens    int
 }
 
 // Load .env dosyasından konfigürasyonu yükler
@@ -70,6 +90,20 @@ func Load() (*Config, error) {
 		},
 		Log: LogConfig{
 			Level: viper.GetString("LOG_LEVEL"),
+		},
+		News: NewsConfig{
+			APIKey:         viper.GetString("NEWS_API_KEY"),
+			UpdateInterval: viper.GetInt("NEWS_UPDATE_INTERVAL"),
+			CacheTTL:       viper.GetInt("NEWS_CACHE_TTL"),
+			Feeds:          viper.GetString("RSS_FEEDS"),
+		},
+		AI: AIConfig{
+			OpenAIKey:    viper.GetString("OPENAI_API_KEY"),
+			AnthropicKey: viper.GetString("ANTHROPIC_API_KEY"),
+			GPTModel:     viper.GetString("AI_MODEL_GPT"),
+			ClaudeModel:  viper.GetString("AI_MODEL_CLAUDE"),
+			Temperature:  viper.GetFloat64("AI_TEMPERATURE"),
+			MaxTokens:    viper.GetInt("AI_MAX_TOKENS"),
 		},
 	}
 

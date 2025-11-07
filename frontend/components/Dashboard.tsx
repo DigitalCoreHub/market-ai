@@ -1,6 +1,8 @@
 'use client';
 
 import AgentsPerformanceChart, { type AgentHistory } from '@/components/AgentsPerformanceChart';
+import LatestNews from '@/components/LatestNews';
+import ReasoningFeed from '@/components/ReasoningFeed';
 import { useWebSocket, type WebSocketMessage } from '@/lib/websocket';
 import { Activity, Moon, Sun, TrendingUp, Wallet, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -18,6 +20,7 @@ interface Agent {
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentHistory, setAgentHistory] = useState<AgentHistory[]>([]);
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const agentHistoryRef = useRef<AgentHistory[]>([]);
   const lastSnapshotTimeRef = useRef<number>(0);
   const [darkMode, setDarkMode] = useState(() => {
@@ -26,6 +29,8 @@ export default function Dashboard() {
     return stored ? JSON.parse(stored) : true;
   });
   const handleWsMessage = (message: WebSocketMessage) => {
+    setLastMessage(message);
+
     if (message.type === 'price_update') {
       // Record agent balance snapshots on price update
       if (agents.length > 0) {
@@ -231,6 +236,12 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* AI Reasoning & News Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ReasoningFeed lastMessage={lastMessage} />
+          <LatestNews lastMessage={lastMessage} />
         </div>
       </div>
     </div>

@@ -1,6 +1,9 @@
 'use client';
 
 import AgentsPerformanceChart, { type AgentHistory } from '@/components/AgentsPerformanceChart';
+import LatestNews from '@/components/LatestNews';
+import Leaderboard from '@/components/Leaderboard';
+import ReasoningFeed from '@/components/ReasoningFeed';
 import { useWebSocket, type WebSocketMessage } from '@/lib/websocket';
 import { Activity, Moon, Sun, TrendingUp, Wallet, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -18,14 +21,13 @@ interface Agent {
 export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentHistory, setAgentHistory] = useState<AgentHistory[]>([]);
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
+  const [darkMode, setDarkMode] = useState(true); // Default to true, will sync in useEffect
   const agentHistoryRef = useRef<AgentHistory[]>([]);
   const lastSnapshotTimeRef = useRef<number>(0);
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    const stored = localStorage.getItem('darkMode');
-    return stored ? JSON.parse(stored) : true;
-  });
   const handleWsMessage = (message: WebSocketMessage) => {
+    setLastMessage(message);
+
     if (message.type === 'price_update') {
       // Record agent balance snapshots on price update
       if (agents.length > 0) {
@@ -57,10 +59,25 @@ export default function Dashboard() {
   // Initialize ref with agents when they change
   useEffect(() => {
     agentHistoryRef.current = agentHistory;
-  }, [agentHistory]);  useEffect(() => {
-    if (darkMode === null) return;
+  }, [agentHistory]);
+
+  // Load dark mode from localStorage only on client
+  // eslint-disable react-hooks/exhaustive-deps
+  useEffect(() => {
+    const stored = localStorage.getItem('darkMode');
+    setDarkMode(stored ? JSON.parse(stored) : true);
+  }, []);
+
+  useEffect(() => {
     // Update DOM and localStorage when darkMode changes
-    document.documentElement.classList.toggle('dark', darkMode);
+    const html = document.documentElement;
+    if (darkMode) {
+      html.classList.add('dark');
+      html.classList.remove('light');
+    } else {
+      html.classList.add('light');
+      html.classList.remove('dark');
+    }
     localStorage.setItem('darkMode', JSON.stringify(darkMode));
   }, [darkMode]);
 
@@ -167,6 +184,9 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Leaderboard */}
+        <Leaderboard />
+
         {/* Performance Chart */}
         {agentHistory.length > 0 && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
@@ -216,7 +236,7 @@ export default function Dashboard() {
                         <span className={`w-1.5 h-1.5 rounded-full ${
                           agent.status === 'active' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
                         }`} />
-                        {agent.status}
+                        {agent.status === 'active' ? 'Aktif' : 'Pasif'}
                       </span>
                     </div>
                   </div>
@@ -231,6 +251,12 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* AI Reasoning & News Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ReasoningFeed lastMessage={lastMessage} />
+          <LatestNews lastMessage={lastMessage} />
         </div>
       </div>
     </div>

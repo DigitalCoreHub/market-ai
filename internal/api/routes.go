@@ -12,6 +12,8 @@ func SetupRoutes(
 	agentHandler *handlers.AgentHandler,
 	stockHandler *handlers.StockHandler,
 	tradeHandler *handlers.TradeHandler,
+	leaderboardHandler *handlers.LeaderboardHandler,
+	roiHistoryHandler *handlers.ROIHistoryHandler,
 	hub *websocket.Hub,
 ) {
 	app.Get("/health", healthHandler.Check)
@@ -34,4 +36,8 @@ func SetupRoutes(
 	trades := v1.Group("/trades")
 	trades.Post("/", tradeHandler.Execute)
 	trades.Get("/", tradeHandler.GetHistory)
+
+	// Leaderboard
+	v1.Get("/leaderboard", leaderboardHandler.GetLeaderboard)
+	v1.Get("/leaderboard/roi-history", roiHistoryHandler.GetAllAgentsROIHistory)
 }

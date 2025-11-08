@@ -70,7 +70,14 @@ func main() {
 	tradingEngine := services.NewTradingEngine(db)
 	riskManager := services.NewRiskManager(db, 5.0, 20.0, 70.0)
 
-	// === AGENT ENGINE (30-60 sec decisions) ===
+	// === AGENT ENGINE (decision intervals) ===
+	minDec := 30 * time.Second
+	maxDec := 60 * time.Second
+	if cfg.AI.BudgetMode {
+		// Stretch intervals to cut daily call volume roughly in half/third
+		minDec = 60 * time.Second
+		maxDec = 120 * time.Second
+	}
 	agentEngine := services.NewAgentEngine(
 		db,
 		redisClient,
@@ -78,26 +85,79 @@ func main() {
 		tradingEngine,
 		riskManager,
 		newsAggregator,
-		30*time.Second,
-		60*time.Second,
+		minDec,
+		maxDec,
 	)
 
 	// === AI CLIENTS ===
 	openaiClient := ai.NewOpenAIClient(cfg.AI.OpenAIKey, cfg.AI.GPTModel)
+	gpt4MiniClient := ai.NewOpenAIClient(cfg.AI.OpenAIKey, cfg.AI.GPT4MiniModel)
 	claudeClient := ai.NewAnthropicClient(cfg.AI.AnthropicKey, cfg.AI.ClaudeModel)
+	var geminiClient *ai.GoogleClient
+	if c, err := ai.NewGoogleClient(cfg.AI.GoogleKey, cfg.AI.GoogleModel); err == nil {
+		geminiClient = c
+	} else {
+		log.Warn().Err(err).Msg("Gemini client disabled")
+	}
+	deepseekClient := ai.NewDeepSeekClient(cfg.AI.DeepSeekKey, cfg.AI.DeepSeekModel)
+	groqClient := ai.NewGroqClient(cfg.AI.GroqKey, cfg.AI.GroqModel)
+	mistralClient := ai.NewMistralClient(cfg.AI.MistralKey, cfg.AI.MistralModel)
+	xaiClient := ai.NewXAIClient(cfg.AI.XAIKey, cfg.AI.XAIModel)
 
-	// Get agent IDs from database and register AI clients
-	var gptAgentID, claudeAgentID uuid.UUID
-	err = db.QueryRow(ctx, "SELECT id FROM agents WHERE name ILIKE '%GPT%' LIMIT 1").Scan(&gptAgentID)
-	if err == nil {
-		agentEngine.RegisterAgent(gptAgentID, openaiClient)
-		log.Info().Str("agent", "GPT-4 Turbo").Msg("AI client registered")
+	// Get agent IDs from database and register AI clients (conditional by cost flags)
+	// Premium detection: GPT-4, Claude Sonnet/Opus, Grok
+	premiumModels := map[string]bool{
+		cfg.AI.GPTModel:    true,
+		cfg.AI.ClaudeModel: true,
+		cfg.AI.XAIModel:    true,
 	}
 
-	err = db.QueryRow(ctx, "SELECT id FROM agents WHERE name ILIKE '%Claude%' LIMIT 1").Scan(&claudeAgentID)
-	if err == nil {
-		agentEngine.RegisterAgent(claudeAgentID, claudeClient)
-		log.Info().Str("agent", "Claude 3").Msg("AI client registered")
+	// Register all known agents by name substrings
+	rows, qerr := db.Query(ctx, "SELECT id, name FROM agents WHERE status = 'active'")
+	if qerr == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id uuid.UUID
+			var name string
+			if err := rows.Scan(&id, &name); err != nil {
+				continue
+			}
+			switch {
+			case strings.Contains(strings.ToLower(name), "gpt-4o mini") || strings.Contains(strings.ToLower(name), "gpt-4o-mini"):
+				if gpt4MiniClient != nil {
+					agentEngine.RegisterAgent(id, gpt4MiniClient)
+				}
+			case strings.Contains(strings.ToLower(name), "gpt"):
+				if openaiClient != nil && (cfg.AI.EnablePremiumModels || !premiumModels[openaiClient.GetModelName()]) {
+					agentEngine.RegisterAgent(id, openaiClient)
+				}
+			case strings.Contains(strings.ToLower(name), "claude"):
+				if claudeClient != nil && (cfg.AI.EnablePremiumModels || !premiumModels[claudeClient.GetModelName()]) {
+					agentEngine.RegisterAgent(id, claudeClient)
+				}
+			case strings.Contains(strings.ToLower(name), "gemini") && geminiClient != nil:
+				// Gemini treated as mid-tier: always allowed unless explicitly disabled by empty key
+				agentEngine.RegisterAgent(id, geminiClient)
+			case strings.Contains(strings.ToLower(name), "deepseek"):
+				if deepseekClient != nil {
+					agentEngine.RegisterAgent(id, deepseekClient)
+				}
+			case strings.Contains(strings.ToLower(name), "llama"):
+				if groqClient != nil {
+					agentEngine.RegisterAgent(id, groqClient)
+				}
+			case strings.Contains(strings.ToLower(name), "mixtral"):
+				if mistralClient != nil {
+					agentEngine.RegisterAgent(id, mistralClient)
+				}
+			case strings.Contains(strings.ToLower(name), "grok"):
+				if xaiClient != nil && (cfg.AI.EnablePremiumModels || !premiumModels[xaiClient.GetModelName()]) {
+					agentEngine.RegisterAgent(id, xaiClient)
+				}
+			}
+		}
+	} else {
+		log.Warn().Err(qerr).Msg("Failed to query agents for registration")
 	}
 
 	// Start agent engine
@@ -110,8 +170,10 @@ func main() {
 	agentHandler := handlers.NewAgentHandler(db)
 	stockHandler := handlers.NewStockHandler(db)
 	tradeHandler := handlers.NewTradeHandler(db, tradingEngine)
+	leaderboardHandler := handlers.NewLeaderboardHandler(db)
+	roiHistoryHandler := handlers.NewROIHistoryHandler(db)
 
-	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, hub)
+	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, leaderboardHandler, roiHistoryHandler, hub)
 
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)
@@ -120,6 +182,14 @@ func main() {
 			log.Fatal().Err(err).Msg("Failed to start server")
 		}
 	}()
+
+	// === LEADERBOARD SERVICE (interval from env, default 60s) ===
+	lbInterval := time.Duration(cfg.Leaderboard.UpdateInterval)
+	if lbInterval <= 0 {
+		lbInterval = 60
+	}
+	leaderboardSvc := services.NewLeaderboardService(db, hub, lbInterval*time.Second)
+	go leaderboardSvc.Start(ctx)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

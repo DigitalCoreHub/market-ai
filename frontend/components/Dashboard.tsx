@@ -2,6 +2,7 @@
 
 import AgentsPerformanceChart, { type AgentHistory } from '@/components/AgentsPerformanceChart';
 import LatestNews from '@/components/LatestNews';
+import Leaderboard from '@/components/Leaderboard';
 import ReasoningFeed from '@/components/ReasoningFeed';
 import { useWebSocket, type WebSocketMessage } from '@/lib/websocket';
 import { Activity, Moon, Sun, TrendingUp, Wallet, Zap } from 'lucide-react';
@@ -182,6 +183,9 @@ export default function Dashboard() {
             </>
           )}
         </div>
+
+        {/* Leaderboard */}
+        <Leaderboard />
 
         {/* Performance Chart */}
         {agentHistory.length > 0 && (

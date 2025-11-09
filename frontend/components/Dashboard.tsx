@@ -51,10 +51,10 @@ export default function Dashboard() {
       }
     }
   };
-  const { isConnected } = useWebSocket('ws://localhost:8080/ws', { onMessage: handleWsMessage });
+  const { isConnected } = useWebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws', { onMessage: handleWsMessage });
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/v1/agents')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'}/v1/agents`)
       .then(res => res.json())
       .then((data: { success?: boolean; data?: unknown }) => {
         if (data.data && Array.isArray(data.data)) {

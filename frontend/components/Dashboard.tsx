@@ -1,8 +1,12 @@
 'use client';
 
 import AgentsPerformanceChart, { type AgentHistory } from '@/components/AgentsPerformanceChart';
+import BreakingNews from '@/components/BreakingNews';
 import LatestNews from '@/components/LatestNews';
+import Leaderboard from '@/components/Leaderboard';
+import MarketDataSources from '@/components/MarketDataSources';
 import ReasoningFeed from '@/components/ReasoningFeed';
+import StockSentimentPanel from '@/components/StockSentimentPanel';
 import { useWebSocket, type WebSocketMessage } from '@/lib/websocket';
 import { Activity, Moon, Sun, TrendingUp, Wallet, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -183,6 +187,9 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Leaderboard */}
+        <Leaderboard />
+
         {/* Performance Chart */}
         {agentHistory.length > 0 && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
@@ -190,6 +197,15 @@ export default function Dashboard() {
             <AgentsPerformanceChart data={agentHistory} agents={agents} height={400} />
           </div>
         )}
+
+        {/* Market Data Sources + Sentiment (v0.5) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <MarketDataSources symbols={["THYAO","AKBNK","ASELS","GARAN"]} />
+          <StockSentimentPanel symbols={["THYAO","AKBNK","ASELS","GARAN"]} />
+        </div>
+
+        {/* Breaking news (scraper) */}
+        <BreakingNews symbols={["THYAO","AKBNK","ASELS","GARAN"]} />
 
         {/* Active AI Agents */}
         <div className="space-y-4">

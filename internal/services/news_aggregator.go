@@ -14,7 +14,7 @@ import (
 	"github.com/1batu/market-ai/internal/websocket"
 )
 
-// NewsAggregator fetches and caches news from multiple sources
+// NewsAggregator birden fazla kaynaktan haber getirir ve önbelleğe alır
 type NewsAggregator struct {
 	db        *pgxpool.Pool
 	redis     *redis.Client
@@ -26,7 +26,7 @@ type NewsAggregator struct {
 	cacheTTL  time.Duration
 }
 
-// NewNewsAggregator creates a new news aggregator service
+// NewNewsAggregator yeni bir haber toplayıcı servisi oluşturur
 func NewNewsAggregator(
 	db *pgxpool.Pool,
 	redis *redis.Client,
@@ -52,16 +52,16 @@ func NewNewsAggregator(
 	}
 }
 
-// Start begins the news aggregation loop
+// Start haber toplama döngüsünü başlatır
 func (na *NewsAggregator) Start(ctx context.Context) {
 	log.Info().
 		Dur("interval", na.interval).
 		Msg("News aggregator started")
 
-	// First fetch immediately
+	// Önce hemen getir
 	na.fetchAndStore(ctx)
 
-	// Then fetch at intervals
+	// Sonra aralıklarla getir
 	ticker := time.NewTicker(na.interval)
 	defer ticker.Stop()
 
@@ -76,14 +76,14 @@ func (na *NewsAggregator) Start(ctx context.Context) {
 	}
 }
 
-// fetchAndStore fetches news from all sources and stores in DB/cache
+// fetchAndStore tüm kaynaklardan haber getirir ve veritabanına/önbelleğe kaydeder
 func (na *NewsAggregator) fetchAndStore(ctx context.Context) {
 	start := time.Now()
 	log.Debug().Msg("Fetching news from all sources")
 
 	var allArticles []models.NewsArticle
 
-	// Fetch from News API
+	// News API'den getir
 	if newsAPIArticles, err := na.newsAPI.GetTurkeyFinanceNews(ctx); err == nil {
 		allArticles = append(allArticles, newsAPIArticles...)
 		log.Debug().Int("count", len(newsAPIArticles)).Msg("Fetched from News API")
@@ -91,7 +91,7 @@ func (na *NewsAggregator) fetchAndStore(ctx context.Context) {
 		log.Warn().Err(err).Msg("Failed to fetch from News API")
 	}
 
-	// Fetch from RSS feeds
+	// RSS beslemelerinden getir
 	if rssArticles, err := na.rssParser.GetEconomyNews(ctx); err == nil {
 		allArticles = append(allArticles, rssArticles...)
 		log.Debug().Int("count", len(rssArticles)).Msg("Fetched from RSS feeds")
@@ -99,11 +99,11 @@ func (na *NewsAggregator) fetchAndStore(ctx context.Context) {
 		log.Warn().Err(err).Msg("Failed to fetch from RSS feeds")
 	}
 
-	// Deduplicate by URL
+	// URL'ye göre tekrarları kaldır
 	uniqueArticles := na.deduplicateByURL(allArticles)
 	log.Info().Int("total", len(allArticles)).Int("unique", len(uniqueArticles)).Msg("News fetched")
 
-	// Store in database
+	// Veritabanına kaydet
 	storedCount := 0
 	for _, article := range uniqueArticles {
 		if err := na.storeArticle(ctx, article); err != nil {
@@ -115,19 +115,19 @@ func (na *NewsAggregator) fetchAndStore(ctx context.Context) {
 
 	log.Info().Int("stored", storedCount).Msg("Articles stored in database")
 
-	// Cache in Redis
+	// Redis'e önbelleğe al
 	if err := na.newsCache.SetLatestNews(ctx, uniqueArticles); err != nil {
 		log.Error().Err(err).Msg("Failed to cache news in Redis")
 	}
 
-	// Broadcast to WebSocket clients
+	// WebSocket istemcilerine yayınla
 	na.hub.BroadcastMessage("news_update", map[string]interface{}{
 		"count":     len(uniqueArticles),
-		"articles":  uniqueArticles[:min(len(uniqueArticles), 5)], // Top 5
+		"articles":  uniqueArticles[:min(len(uniqueArticles), 5)], // İlk 5
 		"timestamp": time.Now().Unix(),
 	})
 
-	// Log to database
+	// Veritabanına kaydet
 	executionTime := time.Since(start).Milliseconds()
 	na.logFetch("News API + RSS", len(allArticles), storedCount, true, "", int(executionTime))
 
@@ -138,7 +138,7 @@ func (na *NewsAggregator) fetchAndStore(ctx context.Context) {
 		Msg("News aggregation cycle completed")
 }
 
-// storeArticle stores a single article in the database
+// storeArticle tek bir makaleyi veritabanına kaydeder
 func (na *NewsAggregator) storeArticle(ctx context.Context, article models.NewsArticle) error {
 	query := `
 		INSERT INTO market_events (
@@ -162,7 +162,7 @@ func (na *NewsAggregator) storeArticle(ctx context.Context, article models.NewsA
 	return err
 }
 
-// deduplicateByURL removes duplicate articles by URL
+// deduplicateByURL URL'ye göre tekrar eden makaleleri kaldırır
 func (na *NewsAggregator) deduplicateByURL(articles []models.NewsArticle) []models.NewsArticle {
 	seen := make(map[string]bool)
 	unique := make([]models.NewsArticle, 0, len(articles))
@@ -177,7 +177,7 @@ func (na *NewsAggregator) deduplicateByURL(articles []models.NewsArticle) []mode
 	return unique
 }
 
-// logFetch logs a news fetch operation
+// logFetch bir haber getirme işlemini kaydeder
 func (na *NewsAggregator) logFetch(source string, fetched, stored int, success bool, errMsg string, execTimeMs int) {
 	query := `
 		INSERT INTO news_fetch_log (source, articles_fetched, articles_stored, success, error_message, execution_time_ms)
@@ -190,15 +190,15 @@ func (na *NewsAggregator) logFetch(source string, fetched, stored int, success b
 	}
 }
 
-// GetLatestNews retrieves the latest cached news
+// GetLatestNews en son önbelleğe alınmış haberleri getirir
 func (na *NewsAggregator) GetLatestNews(ctx context.Context) ([]models.NewsArticle, error) {
-	// Try cache first
+	// Önce önbelleği dene
 	cached, err := na.newsCache.GetLatestNews(ctx)
 	if err == nil {
 		return cached, nil
 	}
 
-	// Fallback to database
+	// Veritabanına geri dön
 	query := `
 		SELECT id, title, description, source, url, related_stocks, published_at, fetched_at, created_at
 		FROM market_events
@@ -244,7 +244,7 @@ func (na *NewsAggregator) GetLatestNews(ctx context.Context) ([]models.NewsArtic
 	return articles, nil
 }
 
-// min is a helper function to get the minimum of two integers
+// min iki tam sayının en küçüğünü almak için yardımcı fonksiyon
 func min(a, b int) int {
 	if a < b {
 		return a

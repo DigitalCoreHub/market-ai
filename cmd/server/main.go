@@ -14,6 +14,11 @@ import (
 	"github.com/1batu/market-ai/internal/api/handlers"
 	"github.com/1batu/market-ai/internal/config"
 	"github.com/1batu/market-ai/internal/database"
+	"github.com/1batu/market-ai/internal/datasources/fusion"
+	"github.com/1batu/market-ai/internal/datasources/scraper"
+	tw "github.com/1batu/market-ai/internal/datasources/twitter"
+	"github.com/1batu/market-ai/internal/datasources/yahoo"
+	"github.com/1batu/market-ai/internal/middleware"
 	"github.com/1batu/market-ai/internal/services"
 	"github.com/1batu/market-ai/internal/websocket"
 	"github.com/1batu/market-ai/pkg/logger"
@@ -29,6 +34,10 @@ func main() {
 
 	logger.Init(cfg.Log.Level)
 	log.Info().Msg("Logger initialized")
+
+	// Initialize authentication
+	middleware.InitAuth(cfg.Auth.JWTSecret, cfg.Auth.APIKey)
+	log.Info().Msg("Authentication initialized")
 
 	db, err := database.NewPostgresPool(cfg.Database)
 	if err != nil {
@@ -48,11 +57,11 @@ func main() {
 	go hub.Run()
 	log.Info().Msg("WebSocket hub started")
 
-	// Initialize v0.3 services
+	// v0.3 servislerini başlat
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// === NEWS AGGREGATOR (30 min cycle) ===
+	// === HABER TOPLAYICI (30 dk döngü) ===
 	rssFeeds := strings.Split(cfg.News.Feeds, ",")
 	newsAggregator := services.NewNewsAggregator(
 		db,
@@ -66,11 +75,18 @@ func main() {
 	go newsAggregator.Start(ctx)
 	log.Info().Msg("News aggregator started (30 min cycle)")
 
-	// === TRADING ENGINE & RISK MANAGER ===
+	// === TİCARET MOTORU & RİSK YÖNETİCİSİ ===
 	tradingEngine := services.NewTradingEngine(db)
 	riskManager := services.NewRiskManager(db, 5.0, 20.0, 70.0)
 
-	// === AGENT ENGINE (30-60 sec decisions) ===
+	// === AJAN MOTORU (karar aralıkları) ===
+	minDec := 30 * time.Second
+	maxDec := 60 * time.Second
+	if cfg.AI.BudgetMode {
+		// Günlük çağrı hacmini kabaca yarıya/üçte bire indirmek için aralıkları uzat
+		minDec = 60 * time.Second
+		maxDec = 120 * time.Second
+	}
 	agentEngine := services.NewAgentEngine(
 		db,
 		redisClient,
@@ -78,40 +94,148 @@ func main() {
 		tradingEngine,
 		riskManager,
 		newsAggregator,
-		30*time.Second,
-		60*time.Second,
+		minDec,
+		maxDec,
 	)
 
-	// === AI CLIENTS ===
+	// === YZ İSTEMCİLERİ ===
 	openaiClient := ai.NewOpenAIClient(cfg.AI.OpenAIKey, cfg.AI.GPTModel)
+	gpt4MiniClient := ai.NewOpenAIClient(cfg.AI.OpenAIKey, cfg.AI.GPT4MiniModel)
 	claudeClient := ai.NewAnthropicClient(cfg.AI.AnthropicKey, cfg.AI.ClaudeModel)
+	var geminiClient *ai.GoogleClient
+	if c, err := ai.NewGoogleClient(cfg.AI.GoogleKey, cfg.AI.GoogleModel); err == nil {
+		geminiClient = c
+	} else {
+		log.Warn().Err(err).Msg("Gemini client disabled")
+	}
+	deepseekClient := ai.NewDeepSeekClient(cfg.AI.DeepSeekKey, cfg.AI.DeepSeekModel)
+	groqClient := ai.NewGroqClient(cfg.AI.GroqKey, cfg.AI.GroqModel)
+	mistralClient := ai.NewMistralClient(cfg.AI.MistralKey, cfg.AI.MistralModel)
+	xaiClient := ai.NewXAIClient(cfg.AI.XAIKey, cfg.AI.XAIModel)
 
-	// Get agent IDs from database and register AI clients
-	var gptAgentID, claudeAgentID uuid.UUID
-	err = db.QueryRow(ctx, "SELECT id FROM agents WHERE name ILIKE '%GPT%' LIMIT 1").Scan(&gptAgentID)
-	if err == nil {
-		agentEngine.RegisterAgent(gptAgentID, openaiClient)
-		log.Info().Str("agent", "GPT-4 Turbo").Msg("AI client registered")
+	// Veritabanından ajan kimliklerini al ve YZ istemcilerini kaydet (maliyet bayraklarına göre koşullu)
+	// Premium tespit: GPT-4, Claude Sonnet/Opus, Grok
+	premiumModels := map[string]bool{
+		cfg.AI.GPTModel:    true,
+		cfg.AI.ClaudeModel: true,
+		cfg.AI.XAIModel:    true,
 	}
 
-	err = db.QueryRow(ctx, "SELECT id FROM agents WHERE name ILIKE '%Claude%' LIMIT 1").Scan(&claudeAgentID)
-	if err == nil {
-		agentEngine.RegisterAgent(claudeAgentID, claudeClient)
-		log.Info().Str("agent", "Claude 3").Msg("AI client registered")
+	// Tüm bilinen ajanları isim alt dizelerine göre kaydet
+	rows, qerr := db.Query(ctx, "SELECT id, name FROM agents WHERE status = 'active'")
+	if qerr == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id uuid.UUID
+			var name string
+			if err := rows.Scan(&id, &name); err != nil {
+				continue
+			}
+			switch {
+			case strings.Contains(strings.ToLower(name), "gpt-4o mini") || strings.Contains(strings.ToLower(name), "gpt-4o-mini"):
+				if gpt4MiniClient != nil {
+					agentEngine.RegisterAgent(id, gpt4MiniClient)
+				}
+			case strings.Contains(strings.ToLower(name), "gpt"):
+				if openaiClient != nil && (cfg.AI.EnablePremiumModels || !premiumModels[openaiClient.GetModelName()]) {
+					agentEngine.RegisterAgent(id, openaiClient)
+				}
+			case strings.Contains(strings.ToLower(name), "claude"):
+				if claudeClient != nil && (cfg.AI.EnablePremiumModels || !premiumModels[claudeClient.GetModelName()]) {
+					agentEngine.RegisterAgent(id, claudeClient)
+				}
+			case strings.Contains(strings.ToLower(name), "gemini") && geminiClient != nil:
+				// Gemini orta seviye olarak kabul ediliyor: boş anahtar ile açıkça devre dışı bırakılmadıkça her zaman izin verilir
+				agentEngine.RegisterAgent(id, geminiClient)
+			case strings.Contains(strings.ToLower(name), "deepseek"):
+				if deepseekClient != nil {
+					agentEngine.RegisterAgent(id, deepseekClient)
+				}
+			case strings.Contains(strings.ToLower(name), "llama"):
+				if groqClient != nil {
+					agentEngine.RegisterAgent(id, groqClient)
+				}
+			case strings.Contains(strings.ToLower(name), "mixtral"):
+				if mistralClient != nil {
+					agentEngine.RegisterAgent(id, mistralClient)
+				}
+			case strings.Contains(strings.ToLower(name), "grok"):
+				if xaiClient != nil && (cfg.AI.EnablePremiumModels || !premiumModels[xaiClient.GetModelName()]) {
+					agentEngine.RegisterAgent(id, xaiClient)
+				}
+			}
+		}
+	} else {
+		log.Warn().Err(qerr).Msg("Failed to query agents for registration")
 	}
 
-	// Start agent engine
+	// Ajan motorunu başlat
 	go agentEngine.Start(ctx)
 	log.Info().Msg("Agent engine started (30-60 sec decision cycle)")
 
 	app := api.NewServer(cfg)
 
+	// === v0.5 VERİ KAYNAĞI İSTEMCİLERİ & FÜZYON SERVİSİ ===
+	// Çevre yapılandırmasından sembol evreni (boşsa varsayılanlara geri dön)
+	symbols := []string{"THYAO", "AKBNK", "ASELS", "GARAN", "BIMAS", "KCHOL", "SISE"}
+	if su := strings.TrimSpace(cfg.DataSources.SymbolUniverse); su != "" {
+		parts := strings.Split(su, ",")
+		var parsed []string
+		for _, p := range parts {
+			p = strings.ToUpper(strings.TrimSpace(p))
+			if p != "" {
+				parsed = append(parsed, p)
+			}
+		}
+		if len(parsed) > 0 {
+			symbols = parsed
+		}
+	}
+
+	yahooClient := yahoo.NewYahooFinanceClient()
+	webScraper := scraper.NewWebScraper()
+	// Çalışma zamanı anahtarları doğrulama ve nazik devre dışı bırakma
+	var twitterClient *tw.Client
+	if cfg.DataSources.TwitterAPIKey != "" && cfg.DataSources.TwitterAPISecret != "" &&
+		cfg.DataSources.TwitterAccessToken != "" && cfg.DataSources.TwitterAccessSecret != "" {
+		twitterClient = tw.NewClient(
+			cfg.DataSources.TwitterAPIKey,
+			cfg.DataSources.TwitterAPISecret,
+			cfg.DataSources.TwitterAccessToken,
+			cfg.DataSources.TwitterAccessSecret,
+		)
+	} else {
+		log.Warn().Msg("Twitter credentials missing; Twitter features disabled")
+	}
+	var tweetAnalyzer *tw.Analyzer
+	if cfg.AI.OpenAIKey != "" {
+		tweetAnalyzer = tw.NewAnalyzer(cfg.AI.OpenAIKey) // duygu analizi için OpenAI anahtarını yeniden kullan
+	} else {
+		log.Warn().Msg("OPENAI_API_KEY missing; tweet sentiment analysis disabled")
+	}
+
+	fusionService := fusion.New(db, yahooClient, webScraper, twitterClient, tweetAnalyzer)
+	marketCtxHandler := handlers.NewMarketContextHandler(fusionService)
+	debugHandler := handlers.NewDebugDataHandler(yahooClient, webScraper, twitterClient, tweetAnalyzer)
+	metricsHandler := handlers.NewMetricsHandler(db)
+	// Dynamic stock universe service (6h interval)
+	stockUniverseSvc := services.NewStockUniverseService(db, hub, 6*time.Hour)
+	go stockUniverseSvc.Start(ctx)
+	universeHandler := handlers.NewUniverseHandler(db, stockUniverseSvc)
+	// Prompt bağlamı için füzyon + sembolleri ajan motoruna enjekte et
+	agentEngine.SetFusionService(fusionService)
+	agentEngine.SetContextSymbols(symbols)
+
+	// === HTTP İŞLEYİCİLERİ ===
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	agentHandler := handlers.NewAgentHandler(db)
 	stockHandler := handlers.NewStockHandler(db)
 	tradeHandler := handlers.NewTradeHandler(db, tradingEngine)
+	leaderboardHandler := handlers.NewLeaderboardHandler(db)
+	roiHistoryHandler := handlers.NewROIHistoryHandler(db)
+	authHandler := handlers.NewAuthHandler(cfg)
 
-	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, hub)
+	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, leaderboardHandler, roiHistoryHandler, marketCtxHandler, debugHandler, metricsHandler, universeHandler, authHandler, hub)
 
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)
@@ -121,12 +245,38 @@ func main() {
 		}
 	}()
 
+	// === LİDER TABLOSU SERVİSİ (çevreden aralık, varsayılan 60s) ===
+	lbInterval := time.Duration(cfg.Leaderboard.UpdateInterval)
+	if lbInterval <= 0 {
+		lbInterval = 60
+	}
+	leaderboardSvc := services.NewLeaderboardService(db, hub, lbInterval*time.Second)
+	go leaderboardSvc.Start(ctx)
+
+	// === PİYASA VERİSİ TOPLAYICI & DUYGU TAKİPCİSİ (v0.5) ===
+	mdc := services.NewMarketDataCollector(
+		fusionService,
+		symbols,
+		cfg.DataSources.YahooFetchInterval,
+		cfg.DataSources.ScraperFetchInterval,
+		cfg.DataSources.TwitterFetchInterval,
+	)
+	go mdc.Start(ctx)
+
+	sentimentTracker := services.NewSentimentTracker(
+		db,
+		symbols,
+		cfg.DataSources.SentimentUpdateInterval,
+		60, // duygu toplama için pencere dakikaları (daha sonra çevre tarafından yönlendirilebilir)
+	)
+	go sentimentTracker.Start(ctx)
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Info().Msg("Shutting down server...")
-	cancel() // Stop all services
+	cancel() // Tüm servisleri durdur
 	if err := app.ShutdownWithContext(context.Background()); err != nil {
 		log.Fatal().Err(err).Msg("Server forced to shutdown")
 	}

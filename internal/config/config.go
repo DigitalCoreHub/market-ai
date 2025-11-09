@@ -7,12 +7,15 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Log      LogConfig
-	News     NewsConfig
-	AI       AIConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	Redis       RedisConfig
+	Log         LogConfig
+	News        NewsConfig
+	AI          AIConfig
+	Leaderboard LeaderboardConfig
+	DataSources DataSourcesConfig
+	Auth        AuthConfig
 }
 
 type ServerConfig struct {
@@ -56,6 +59,49 @@ type AIConfig struct {
 	ClaudeModel  string
 	Temperature  float64
 	MaxTokens    int
+
+	// v0.4 providers
+	GoogleKey     string
+	GoogleModel   string
+	DeepSeekKey   string
+	DeepSeekModel string
+	GroqKey       string
+	GroqModel     string
+	MistralKey    string
+	MistralModel  string
+	XAIKey        string
+	XAIModel      string
+	GPT4MiniModel string
+
+	// Cost optimization flags
+	BudgetMode          bool
+	EnablePremiumModels bool
+}
+
+// LeaderboardConfig v0.4 leaderboard update interval
+type LeaderboardConfig struct {
+	UpdateInterval int // seconds
+}
+
+// DataSourcesConfig v0.5 multi-source collection configuration
+type DataSourcesConfig struct {
+	YahooFetchInterval      int
+	ScraperFetchInterval    int
+	TwitterFetchInterval    int
+	SentimentUpdateInterval int
+
+	TwitterAPIKey       string
+	TwitterAPISecret    string
+	TwitterAccessToken  string
+	TwitterAccessSecret string
+
+	SymbolUniverse string // comma-separated symbols (e.g. THYAO,AKBNK,ASELS)
+}
+
+// AuthConfig v1.0 authentication configuration
+type AuthConfig struct {
+	JWTSecret string // JWT signing secret
+	APIKey    string // Master API key for authentication
 }
 
 // Load .env dosyasından konfigürasyonu yükler
@@ -104,6 +150,40 @@ func Load() (*Config, error) {
 			ClaudeModel:  viper.GetString("AI_MODEL_CLAUDE"),
 			Temperature:  viper.GetFloat64("AI_TEMPERATURE"),
 			MaxTokens:    viper.GetInt("AI_MAX_TOKENS"),
+
+			GoogleKey:     viper.GetString("GOOGLE_API_KEY"),
+			GoogleModel:   viper.GetString("AI_MODEL_GEMINI"),
+			DeepSeekKey:   viper.GetString("DEEPSEEK_API_KEY"),
+			DeepSeekModel: viper.GetString("AI_MODEL_DEEPSEEK"),
+			GroqKey:       viper.GetString("GROQ_API_KEY"),
+			GroqModel:     viper.GetString("AI_MODEL_LLAMA"),
+			MistralKey:    viper.GetString("MISTRAL_API_KEY"),
+			MistralModel:  viper.GetString("AI_MODEL_MIXTRAL"),
+			XAIKey:        viper.GetString("XAI_API_KEY"),
+			XAIModel:      viper.GetString("AI_MODEL_GROK"),
+			GPT4MiniModel: viper.GetString("AI_MODEL_GPT4_MINI"),
+
+			BudgetMode:          viper.GetBool("BUDGET_MODE"),
+			EnablePremiumModels: viper.GetBool("ENABLE_PREMIUM_MODELS"),
+		},
+		Leaderboard: LeaderboardConfig{
+			UpdateInterval: viper.GetInt("LEADERBOARD_UPDATE_INTERVAL"),
+		},
+		DataSources: DataSourcesConfig{
+			YahooFetchInterval:      viper.GetInt("YAHOO_FETCH_INTERVAL"),
+			ScraperFetchInterval:    viper.GetInt("SCRAPER_FETCH_INTERVAL"),
+			TwitterFetchInterval:    viper.GetInt("TWITTER_FETCH_INTERVAL"),
+			SentimentUpdateInterval: viper.GetInt("SENTIMENT_UPDATE_INTERVAL"),
+
+			TwitterAPIKey:       viper.GetString("TWITTER_API_KEY"),
+			TwitterAPISecret:    viper.GetString("TWITTER_API_SECRET"),
+			TwitterAccessToken:  viper.GetString("TWITTER_ACCESS_TOKEN"),
+			TwitterAccessSecret: viper.GetString("TWITTER_ACCESS_SECRET"),
+			SymbolUniverse:      viper.GetString("SYMBOL_UNIVERSE"),
+		},
+		Auth: AuthConfig{
+			JWTSecret: viper.GetString("JWT_SECRET"),
+			APIKey:    viper.GetString("API_KEY"),
 		},
 	}
 

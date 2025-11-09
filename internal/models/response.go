@@ -10,6 +10,6 @@ type Response struct {
 
 // HealthResponse sistem sağlık durumu için yanıt
 type HealthResponse struct {
-	Status   string            `json:"status"`
-	Services map[string]string `json:"services"`
+	Status   string                 `json:"status"`
+	Services map[string]interface{} `json:"services"`
 }

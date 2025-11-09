@@ -27,4 +27,10 @@ type DecisionRequest struct {
 	Strategy       string
 	News           []models.NewsArticle // Latest news articles
 	NewsCount      int                  // Number of news articles
+
+	// v0.5 Market Context (fused multi-source snapshot)
+	MCPrices     []*models.StockPrice
+	MCSentiments map[string]*models.StockSentiment
+	MCTopTweets  []models.Tweet
+	MCNotes      string
 }

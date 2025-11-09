@@ -9,39 +9,43 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// RiskManager validates trades based on risk rules
+// RiskManager risk kurallarına göre işlemleri doğrular
 type RiskManager struct {
 	db                 *pgxpool.Pool
-	maxRiskPerTrade    float64 // percentage
-	maxPortfolioRisk   float64 // percentage
+	maxRiskPerTrade    float64 // yüzde
+	maxPortfolioRisk   float64 // yüzde
 	minConfidenceScore float64
 }
 
-// NewRiskManager creates a new risk manager
+// NewRiskManager yeni bir risk yöneticisi oluşturur
 func NewRiskManager(db *pgxpool.Pool, maxRiskPerTrade, maxPortfolioRisk, minConfidence float64) *RiskManager {
 	return &RiskManager{
 		db:                 db,
-		maxRiskPerTrade:    maxRiskPerTrade,  // 5.0 for 5%
-		maxPortfolioRisk:   maxPortfolioRisk, // 20.0 for 20%
-		minConfidenceScore: minConfidence,    // 70.0 for 70%
+		maxRiskPerTrade:    maxRiskPerTrade,  // 5.0 %5 için
+		maxPortfolioRisk:   maxPortfolioRisk, // 20.0 %20 için
+		minConfidenceScore: minConfidence,    // 70.0 %70 için
 	}
 }
 
-// ValidateTrade validates a trading decision against risk rules
+// ValidateTrade bir alım-satım kararını risk kurallarına göre doğrular
 func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, decision *models.AIDecision) error {
-	// Check confidence
+	// Miktar kontrolü
+	if decision.Quantity <= 0 {
+		return fmt.Errorf("invalid quantity: %d (must be > 0)", decision.Quantity)
+	}
+	// Güven kontrolü
 	if decision.Confidence < rm.minConfidenceScore {
 		return fmt.Errorf("confidence too low: %.1f%% < %.1f%%", decision.Confidence, rm.minConfidenceScore)
 	}
 
-	// Get agent balance
+	// Ajan bakiyesini al
 	var balance float64
 	err := rm.db.QueryRow(ctx, "SELECT current_balance FROM agents WHERE id = $1", agentID).Scan(&balance)
 	if err != nil {
 		return fmt.Errorf("failed to get agent balance: %w", err)
 	}
 
-	// Get stock price
+	// Hisse fiyatını al
 	var stockPrice float64
 	err = rm.db.QueryRow(ctx, "SELECT current_price FROM stocks WHERE symbol = $1", decision.StockSymbol).Scan(&stockPrice)
 	if err != nil {
@@ -50,7 +54,7 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 
 	tradeAmount := float64(decision.Quantity) * stockPrice
 
-	// Check trade size
+	// İşlem büyüklüğünü kontrol et
 	if decision.Action == "BUY" {
 		maxTradeAmount := balance * (rm.maxRiskPerTrade / 100)
 		if tradeAmount > maxTradeAmount {
@@ -58,13 +62,16 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 				tradeAmount, maxTradeAmount, rm.maxRiskPerTrade)
 		}
 
-		// Check if sufficient balance
-		if tradeAmount > balance {
-			return fmt.Errorf("insufficient balance: %.2f TL < %.2f TL", balance, tradeAmount)
+		// Yeterli bakiye olup olmadığını kontrol et (komisyon dahil)
+		commission := tradeAmount * 0.001 // %0.1 komisyon varsayımı
+		totalCost := tradeAmount + commission
+		if totalCost > balance {
+			return fmt.Errorf("insufficient balance: %.2f TL < %.2f TL (trade: %.2f + commission: %.2f) - reduce to %d lots",
+				balance, totalCost, tradeAmount, commission, int(balance/stockPrice))
 		}
 	}
 
-	// Check portfolio concentration
+	// Portföy yoğunluğunu kontrol et
 	portfolioValue, err := rm.getPortfolioValue(ctx, agentID)
 	if err != nil {
 		return err
@@ -82,7 +89,7 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 	return nil
 }
 
-// getPortfolioValue calculates total portfolio value for an agent
+// getPortfolioValue bir ajan için toplam portföy değerini hesaplar
 func (rm *RiskManager) getPortfolioValue(ctx context.Context, agentID uuid.UUID) (float64, error) {
 	var value float64
 	query := `

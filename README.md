@@ -1,130 +1,195 @@
 # 🤖 Market AI
 
-### _Türkiye'nin ilk yapay zekâ destekli finans simülasyon arenası_
+Türkiye odaklı, çoklu veri kaynağı ve çoklu model desteği ile AI tabanlı otonom al-sat simülasyon altyapısı.
 
-> **"AI'lar Borsa İstanbul'da yarışsaydı kim kazanırdı?"**
+—
 
----
+## İçindekiler
 
-## 📖 Proje Hakkında
+- Özellikler
+- Mimarinin Özeti
+- Kurulum ve Çalıştırma
+- Ortam Değişkenleri (.env)
+- API Uç Noktaları
+- Veri Tabanı ve Migrasyonlar
+- Test ve Kalite
+- Notlar ve Sorumluluk Reddi
 
-Market AI, finansal piyasalarda yapay zekâ ajanlarının (AI agents) farklı stratejilerle nasıl kararlar aldığını gözlemlemeyi amaçlayan, deneysel bir simülasyon ve test projesidir.
+—
 
-## 🎯 v0.3 - Autonomous AI Agent System with News Integration
+## Özellikler
 
-### ✨ Yeni Özellikler
+- Otonom AI ajanları (rastgele karar aralığı, bütçe modu ile uzatılabilir)
+- Haber + scraper + Twitter verisi ile piyasa bağlamı (Füzyon Servisi)
+- Dinamik Hisse Evreni (v0.6)
+  - Haber/Twitter/İşlem aktivitesine göre otomatik aktif/pasif hisse yönetimi
+  - WebSocket ile “universe_updated” yayını, geçmiş log kaydı
+- AI Kararlarında Lot/Miktar Kontrolü (v0.6)
+  - Prompt’ta maksimum işlem tutarı rehberi
+  - Risk Yöneticisi ile miktar > 0, bakiye + komisyon kontrolü
+- Güvenilirlik skorlaması ve metrikler (v0.5)
+- Çoklu model desteği: OpenAI, Anthropic, Google, DeepSeek, Groq/Llama, Mistral, XAI
+- PostgreSQL + Redis altyapısı, WebSocket yayınları
+- **v1.0: Production Ready**
+  - JWT + API Key authentication
+  - Rate limiting (60 req/min)
+  - Input validation
+  - Prometheus metrics & Grafana dashboards
+  - Dockerized deployment (Docker Compose)
+  - CI/CD pipeline (GitHub Actions)
 
-- **Otonom AI Ajanları**: 30-60 saniye aralıklarla haber bağlamında kendi kendine karar veren AI ajanları
-- **Haber Entegrasyonu**: News API + RSS feeds ile Türkiye finans haberlerinin gerçek zamanlı toplanması
-- **AI Model Desteği**: OpenAI (GPT-3.5/GPT-4) ve Anthropic (Claude 3 Haiku/Opus)
-- **Risk Yönetimi**: Trade'leri gerçekleştirmeden önce otomatik risk doğrulaması
-- **Gerçek Zamanlı Akıl Yürütme Beslemesi**: AI ajanlarının düşünce sürecini canlı izleme
-- **Pazar Analiz Paneli**: Son haberleri ve etki seviyelerini gösteren dashboard
-- **Veritabanı Desteği**: PostgreSQL'de karar zincirlerinin ve düşünce adımlarının depolanması
-- **Redis Cache**: Haber cache'leme (30 dakika TTL) ve hızlı erişim
+—
 
-### 🔄 Sistem Mimarisi
+## Mimarinin Özeti
 
-#### Backend (Go)
+- News Aggregator: Haberleri (NewsAPI + RSS) periyodik toplar, önbellekler ve yayınlar.
+- Fusion Service: Yahoo fiyatları, scraper haberleri ve Twitter duygu verisini birleştirir.
+- Agent Engine: Piyasa bağlamıyla AI kararını üretir, veritabanına kaydeder, riskten geçirir ve işlemi uygular.
+- StockUniverseService: 6 saatte bir (otonom) evren günceller; manuel tetiklenebilir.
+- Leaderboard Service: Belirli aralıkta sıralama hesaplar ve yayınlar.
 
-- **News Aggregator**: 30 dakika aralıklarla yeni haberleri getir → Redis cache → WebSocket broadcast
-- **Agent Engine**: Her agent için 30-60s aralıklarla:
-  1. Piyasa verisi + haberleri topla
-  2. AI client'a isteği gönder (haber bağlamıyla)
-  3. Kararı kaydedilip düşünme adımlarını depola
-  4. Risk Manager'dan geçir
-  5. Trade'i çalıştır / reddet
-  6. WebSocket'ten broadcast et
-- **Risk Manager**: Confidence > 70%, position < 5%, portfolio risk < 20%
-- **AI Clients**: OpenAI + Anthropic entegrasyonu
-- **News System**: NewsAPI.org + RSS parser (Bloomberg HT, Investing.com, Dünya)
+—
 
-#### Frontend (Next.js)
+## Kurulum ve Çalıştırma
 
-- **ReasoningFeed**: Real-time AI decision stream (confidence, risk level, thinking steps)
-- **LatestNews**: Market news display (impact level, related stocks, sentiment)
-- **Dashboard**: Agents performance, P&L tracking, live status
+Önkoşullar: Go 1.23+, Docker, Docker Compose, Node 20+ (frontend için - opsiyonel).
 
-### 📊 Karar Döngüsü
-
-```
-News Aggregator (30 min cycle)
-    ↓
-    [Fetch + Cache]
-    ↓
-Agent Engine (30-60s random per agent)
-    ↓ (every cycle)
-    ├─ Gather market data + recent news
-    ├─ Call AI with context
-    ├─ Store decision + thinking steps
-    ├─ Validate with Risk Manager
-    ├─ Execute/Reject trade
-    └─ Broadcast via WebSocket
-    ↓
-Frontend ReasoningFeed + News Panel
-    ↓
-    [Real-time updates]
-```
-
-### 💰 Maliyet Tahminleri
-
-**Test Modelleri (v0.3 default):**
-
-- GPT-3.5-turbo: $0.001/req → ~$2-3/day
-- Claude 3 Haiku: $0.00025/req → ~$0.5/day
-- **Toplam**: ~$3-5/day
-
-**Production (optional):**
-
-- GPT-4-turbo: $0.01/req → ~$20-30/day
-- Claude 3 Opus: $0.015/req → ~$15-25/day
-- **Toplam**: ~$35-50/day
-
-### 🚀 Başlangıç
+1. Servisleri başlatın
 
 ```bash
-# Backend (Go 1.23+)
-cd cmd/server
-go run main.go
-
-# Frontend (Next.js 16)
-cd frontend
-npm run dev
-
-# Docker (PostgreSQL + Redis)
-docker-compose up -d
+make up
+# veya
+docker-compose up -d  # PostgreSQL + Redis + App
 ```
 
-### 📁 Proje Yapısı
+**Not:** Local development için Prometheus ve Grafana varsayılan olarak kapalıdır. Gerekirse:
 
-```
-market-ai/
-├── backend (Go)
-│   ├── internal/
-│   │   ├── models/        # Data models
-│   │   ├── services/      # Business logic
-│   │   ├── ai/            # AI clients + prompting
-│   │   ├── news/          # News aggregation
-│   │   ├── cache/         # Redis caching
-│   │   └── config/        # Configuration
-│   ├── migrations/        # Database schemas
-│   └── cmd/server/        # Entry point
-├── frontend (Next.js)
-│   ├── components/        # React components
-│   ├── lib/               # Utilities
-│   └── app/               # Pages
-└── docker-compose.yml     # Services
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
-### 🔧 Amaç
+2. Migrasyonları uygulayın (v0.5 veri kaynakları + v0.6 dinamik evren)
 
-- Farklı AI modellerini aynı veri/koşullarda karşılaştırmak
-- Stratejilerin performansını ve karar alma dinamiklerini analiz etmek
-- Backend altyapısını (API, DB, Cache) doğrulamak ve ölçümlemek
-- Haber bağlamında yapılan kararların etkisini gözlemlemek
+```bash
+docker exec -i marketai-postgres psql -U marketai -d marketai_dev < migrations/006_data_sources.sql
+docker exec -i marketai-postgres psql -U marketai -d marketai_dev < migrations/007_data_sources_seed.sql
+docker exec -i marketai-postgres psql -U marketai -d marketai_dev < migrations/008_dynamic_universe.sql
+```
 
-## ⚠️ Uyarı
+3. Sunucuyu başlatın
 
-Bu proje yalnızca deneysel ve eğitim/test amaçlıdır. Buradaki hiçbir çıktı, sinyal veya metrik yatırım tavsiyesi değildir; finansal kararlar için kullanılmamalıdır.
+```bash
+go build -o bin/market-ai ./cmd/server
+./bin/market-ai
+```
 
----
+Opsiyonel (Frontend):
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+—
+
+## Ortam Değişkenleri (.env)
+
+Temel
+
+- PORT, ENV
+- LOG_LEVEL (debug|info|warn|error)
+
+Veritabanı
+
+- DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SSLMODE
+
+Redis
+
+- REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB
+
+Haber (v0.3)
+
+- NEWS_API_KEY, NEWS_UPDATE_INTERVAL (dakika), NEWS_CACHE_TTL (dakika), RSS_FEEDS (virgüllü)
+
+AI Sağlayıcıları (v0.4+)
+
+- OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY, XAI_API_KEY
+
+Model İsimleri (v0.4+)
+
+- AI_MODEL_GPT, AI_MODEL_GPT4_MINI, AI_MODEL_CLAUDE, AI_MODEL_GEMINI, AI_MODEL_DEEPSEEK, AI_MODEL_LLAMA, AI_MODEL_MIXTRAL, AI_MODEL_GROK
+- AI_TEMPERATURE, AI_MAX_TOKENS
+
+Maliyet Bayrakları
+
+- BUDGET_MODE (true|false), ENABLE_PREMIUM_MODELS (true|false)
+
+Veri Kaynakları ve Aralıklar (v0.5)
+
+- YAHOO_FETCH_INTERVAL, SCRAPER_FETCH_INTERVAL, TWITTER_FETCH_INTERVAL (saniye)
+- SENTIMENT_UPDATE_INTERVAL (saniye)
+- TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET
+
+Opsiyonel
+
+- SYMBOL_UNIVERSE: Başlangıç/bağlam sembolleri (Dinamik evren açıkken opsiyoneldir)
+- LEADERBOARD_UPDATE_INTERVAL (varsayılan 60s)
+
+Authentication (v1.0)
+
+- JWT_SECRET: JWT token imzalama secret'ı (production'da mutlaka değiştir!)
+- API_KEY: Master API key (API key ile login yapıp JWT token almak için)
+
+Kaldırılan/Artık Kullanılmayan
+
+- AGENT_DECISION_INTERVAL_MIN/MAX, AGENT_MAX_RISK_PER_TRADE, AGENT_MAX_PORTFOLIO_RISK, AGENT_MIN_CONFIDENCE, AGENT_INITIAL_BALANCE → KULLANILMIYOR
+
+—
+
+## API Uç Noktaları (seçmece)
+
+Authentication (v1.0)
+
+- POST /api/v1/auth/login → API key ile login, JWT token al
+
+Public Endpoints
+
+- GET /health → Health check
+- GET /api/v1/ping → Ping test
+- GET /api/v1/market/context?symbols=THYAO,AKBNK
+- GET /api/v1/metrics, GET /api/v1/metrics/prometheus
+- GET /api/v1/debug/yahoo | /debug/scraper | /debug/tweets
+- GET /api/v1/leaderboard, GET /api/v1/leaderboard/roi-history
+- GET /api/v1/universe/active, GET /api/v1/universe/history
+
+Protected Endpoints (API Key veya JWT Token gerekli)
+
+- POST /api/v1/universe/update → Hisse evrenini güncelle
+
+—
+
+## Veri Tabanı ve Migrasyonlar
+
+- 002: Temel trading tabloları (agents, stocks, trades, portfolio, ...)
+- 006–007: Veri kaynakları ve seed
+- 008: Dinamik hisse evreni, log ve aktivite fonksiyonu
+
+—
+
+## Test ve Kalite
+
+```bash
+go test ./...
+```
+
+Kalite kapıları: Build PASS, mevcut testler PASS. Yeni özellikler için ek testler önerilir (özellikle StockUniverseService).
+
+—
+
+## Notlar ve Sorumluluk Reddi
+
+- Bu proje eğitim ve deneysel amaçlıdır; yatırım tavsiyesi değildir.
+- API maliyetleri modele ve çağrı sıklığına göre değişir; bütçe bayraklarını kullanın.
+
+—
+
+Teşekkürler: Katkılar, geri bildirimler ve PR’lar memnuniyetle karşılanır.

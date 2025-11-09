@@ -246,14 +246,16 @@ func (ae *AgentEngine) gatherDecisionData(
 		Strategy:       "balanced",
 	}
 
-	// Portföyü al
+	// Portföyü al (güncel fiyat ile hesapla)
 	portfolioQuery := `
-		SELECT stock_symbol, quantity, avg_buy_price, COALESCE(quantity * $1, 0) as current_value,
-		       COALESCE(quantity * $1 - total_invested, 0) as profit_loss
-		FROM portfolio WHERE agent_id = $2
+		SELECT p.stock_symbol, p.quantity, p.avg_buy_price,
+			   COALESCE(p.quantity * s.current_price, 0) as current_value,
+			   COALESCE(p.quantity * s.current_price - p.total_invested, 0) as profit_loss
+		FROM portfolio p
+		JOIN stocks s ON s.symbol = p.stock_symbol
+		WHERE p.agent_id = $1
 	`
-	// Not: Bu basitleştirilmiş - üretimde stocks tablosu ile join yapardınız
-	rows, err := ae.db.Query(ctx, portfolioQuery, 100, agentID) // 100 yer tutucu fiyat
+	rows, err := ae.db.Query(ctx, portfolioQuery, agentID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {

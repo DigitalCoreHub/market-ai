@@ -82,6 +82,39 @@ func BuildDecisionPrompt(req *DecisionRequest) string {
 	}
 	sb.WriteString("\n")
 
+	// === AI QUANTITY CONTROL (Position Sizing Guidance) ===
+	maxTradeAmount := req.CurrentBalance * 0.05
+	sb.WriteString("=== 💰 YOUR TRADING AUTHORITY ===\n")
+	sb.WriteString(fmt.Sprintf("Current Balance: %.2f TL\n", req.CurrentBalance))
+	sb.WriteString(fmt.Sprintf("Max Per Trade: %.2f TL (5%% rule)\n\n", maxTradeAmount))
+	sb.WriteString("YOU have FULL CONTROL over:\n")
+	sb.WriteString("1. Which stock to trade\n")
+	sb.WriteString("2. How many LOTS to buy/sell (MUST be an exact integer)\n")
+	sb.WriteString("3. When to trade (timing)\n\n")
+
+	sb.WriteString("=== 📊 DYNAMIC UNIVERSE SNAPSHOT ===\n")
+	if len(req.Stocks) == 0 {
+		sb.WriteString("No active stocks available.\n\n")
+	} else {
+		for _, stock := range req.Stocks {
+			if stock.CurrentPrice <= 0 {
+				continue
+			}
+			maxLots := int(maxTradeAmount / stock.CurrentPrice)
+			sb.WriteString(fmt.Sprintf("- %s (%s): Price: %.2f TL | Max lots: %d (≈ %.2f TL)\n",
+				stock.Symbol, stock.Name, stock.CurrentPrice, maxLots, float64(maxLots)*stock.CurrentPrice))
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("=== ⚠️ QUANTITY CALCULATION RULES ===\n")
+	sb.WriteString("When deciding quantity, consider:\n")
+	sb.WriteString("1. Stock price (higher price = fewer lots)\n")
+	sb.WriteString("2. Your conviction level (higher confidence = more lots)\n")
+	sb.WriteString("3. Risk management (don't exceed 5% per trade)\n")
+	sb.WriteString("4. Portfolio diversification (avoid over-concentration)\n")
+	sb.WriteString("5. Market volatility (more volatile = smaller position)\n\n")
+
 	// Market Data (Recent candles)
 	if len(req.MarketData) > 0 {
 		sb.WriteString("=== RECENT MARKET DATA (Last 5 candles) ===\n")

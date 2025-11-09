@@ -29,6 +29,10 @@ func NewRiskManager(db *pgxpool.Pool, maxRiskPerTrade, maxPortfolioRisk, minConf
 
 // ValidateTrade bir alım-satım kararını risk kurallarına göre doğrular
 func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, decision *models.AIDecision) error {
+	// Miktar kontrolü
+	if decision.Quantity <= 0 {
+		return fmt.Errorf("invalid quantity: %d (must be > 0)", decision.Quantity)
+	}
 	// Güven kontrolü
 	if decision.Confidence < rm.minConfidenceScore {
 		return fmt.Errorf("confidence too low: %.1f%% < %.1f%%", decision.Confidence, rm.minConfidenceScore)
@@ -58,9 +62,12 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 				tradeAmount, maxTradeAmount, rm.maxRiskPerTrade)
 		}
 
-		// Yeterli bakiye olup olmadığını kontrol et
-		if tradeAmount > balance {
-			return fmt.Errorf("insufficient balance: %.2f TL < %.2f TL", balance, tradeAmount)
+		// Yeterli bakiye olup olmadığını kontrol et (komisyon dahil)
+		commission := tradeAmount * 0.001 // %0.1 komisyon varsayımı
+		totalCost := tradeAmount + commission
+		if totalCost > balance {
+			return fmt.Errorf("insufficient balance: %.2f TL < %.2f TL (trade: %.2f + commission: %.2f) - reduce to %d lots",
+				balance, totalCost, tradeAmount, commission, int(balance/stockPrice))
 		}
 	}
 

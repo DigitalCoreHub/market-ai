@@ -17,6 +17,7 @@ func SetupRoutes(
 	marketCtxHandler *handlers.MarketContextHandler,
 	debugHandler *handlers.DebugDataHandler,
 	metricsHandler *handlers.MetricsHandler,
+	universeHandler *handlers.UniverseHandler,
 	hub *websocket.Hub,
 ) {
 	app.Get("/health", healthHandler.Check)
@@ -49,6 +50,12 @@ func SetupRoutes(
 
 	// Metrics endpoint (observability)
 	v1.Get("/metrics", metricsHandler.Get)
+
+	// Dynamic stock universe endpoints
+	universe := v1.Group("/universe")
+	universe.Get("/active", universeHandler.GetActiveStocks)
+	universe.Post("/update", universeHandler.TriggerUniverseUpdate)
+	universe.Get("/history", universeHandler.GetUniverseHistory)
 
 	// Debug endpoints (per-source)
 	dbg := v1.Group("/debug")

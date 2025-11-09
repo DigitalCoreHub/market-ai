@@ -213,6 +213,10 @@ func main() {
 	marketCtxHandler := handlers.NewMarketContextHandler(fusionService)
 	debugHandler := handlers.NewDebugDataHandler(yahooClient, webScraper, twitterClient, tweetAnalyzer)
 	metricsHandler := handlers.NewMetricsHandler(db)
+	// Dynamic stock universe service (6h interval)
+	stockUniverseSvc := services.NewStockUniverseService(db, hub, 6*time.Hour)
+	go stockUniverseSvc.Start(ctx)
+	universeHandler := handlers.NewUniverseHandler(db, stockUniverseSvc)
 	// Prompt bağlamı için füzyon + sembolleri ajan motoruna enjekte et
 	agentEngine.SetFusionService(fusionService)
 	agentEngine.SetContextSymbols(symbols)
@@ -225,7 +229,7 @@ func main() {
 	leaderboardHandler := handlers.NewLeaderboardHandler(db)
 	roiHistoryHandler := handlers.NewROIHistoryHandler(db)
 
-	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, leaderboardHandler, roiHistoryHandler, marketCtxHandler, debugHandler, metricsHandler, hub)
+	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, leaderboardHandler, roiHistoryHandler, marketCtxHandler, debugHandler, metricsHandler, universeHandler, hub)
 
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)

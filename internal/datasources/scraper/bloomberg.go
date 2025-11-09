@@ -22,7 +22,7 @@ func NewBloombergHTScraper() *BloombergHTScraper {
 		colly.AllowedDomains("www.bloomberght.com"),
 		colly.UserAgent("Mozilla/5.0 (compatible; MarketAI/1.0)"),
 	)
-	c.Limit(&colly.LimitRule{DomainGlob: "*bloomberght.com*", Delay: 2 * time.Second, RandomDelay: 1 * time.Second})
+	_ = c.Limit(&colly.LimitRule{DomainGlob: "*bloomberght.com*", Delay: 2 * time.Second, RandomDelay: 1 * time.Second})
 	return &BloombergHTScraper{collector: c, baseURL: "https://www.bloomberght.com"}
 }
 

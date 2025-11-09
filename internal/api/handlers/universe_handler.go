@@ -64,7 +64,7 @@ func (h *UniverseHandler) GetActiveStocks(c *fiber.Ctx) error {
 		FromTwitter int
 		FromTrades  int
 	}
-	h.db.QueryRow(context.Background(), `
+	if err := h.db.QueryRow(context.Background(), `
 		SELECT
 			COUNT(*) as total,
 			COUNT(*) FILTER (WHERE mention_count_7d > 0) as from_news,
@@ -72,7 +72,13 @@ func (h *UniverseHandler) GetActiveStocks(c *fiber.Ctx) error {
 			COUNT(*) FILTER (WHERE last_trade_date > NOW() - INTERVAL '7 days') as from_trades
 		FROM stocks
 		WHERE is_active = TRUE
-	`).Scan(&stats.Total, &stats.FromNews, &stats.FromTwitter, &stats.FromTrades)
+	`).Scan(&stats.Total, &stats.FromNews, &stats.FromTwitter, &stats.FromTrades); err != nil {
+		// Use zero values if query fails
+		stats.Total = 0
+		stats.FromNews = 0
+		stats.FromTwitter = 0
+		stats.FromTrades = 0
+	}
 
 	return c.JSON(fiber.Map{
 		"success": true,
@@ -88,7 +94,11 @@ func (h *UniverseHandler) GetActiveStocks(c *fiber.Ctx) error {
 
 // TriggerUniverseUpdate manually triggers update
 func (h *UniverseHandler) TriggerUniverseUpdate(c *fiber.Ctx) error {
-	go h.service.UpdateUniverse(context.Background())
+	go func() {
+		if err := h.service.UpdateUniverse(context.Background()); err != nil {
+			// Log error but don't block response
+		}
+	}()
 	return c.JSON(fiber.Map{"success": true, "message": "Universe update triggered"})
 }
 

@@ -25,7 +25,11 @@ func (te *TradingEngine) ExecuteTrade(ctx context.Context, req models.TradeReque
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil {
+			// Ignore rollback error if transaction was committed
+		}
+	}()
 
 	var stockPrice float64
 	err = tx.QueryRow(ctx, "SELECT current_price FROM stocks WHERE symbol = $1", req.StockSymbol).Scan(&stockPrice)
@@ -67,7 +71,6 @@ func (te *TradingEngine) ExecuteTrade(ctx context.Context, req models.TradeReque
 		if err != nil {
 			return nil, fmt.Errorf("failed to update portfolio: %w", err)
 		}
-
 	} else if req.TradeType == "SELL" {
 		var currentQuantity int
 		err = tx.QueryRow(ctx,

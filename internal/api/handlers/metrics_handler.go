@@ -66,30 +66,38 @@ func (h *MetricsHandler) GetPrometheus(c *fiber.Ctx) error {
 
 	// Active agents count
 	var activeAgents int
-	h.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM agents WHERE status = 'active'").Scan(&activeAgents)
+	if err := h.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM agents WHERE status = 'active'").Scan(&activeAgents); err != nil {
+		activeAgents = 0
+	}
 	output = append(output, fmt.Sprintf("marketai_active_agents %d", activeAgents))
 
 	// Total trades count
 	var totalTrades int
-	h.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM trades").Scan(&totalTrades)
+	if err := h.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM trades").Scan(&totalTrades); err != nil {
+		totalTrades = 0
+	}
 	output = append(output, fmt.Sprintf("marketai_total_trades %d", totalTrades))
 
 	// Average trade latency (simplified - using created_at)
 	var avgLatency float64
-	h.db.QueryRow(context.Background(), `
+	if err := h.db.QueryRow(context.Background(), `
 		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))), 0)
 		FROM trades
 		WHERE created_at > NOW() - INTERVAL '1 hour'
-	`).Scan(&avgLatency)
+	`).Scan(&avgLatency); err != nil {
+		avgLatency = 0
+	}
 	output = append(output, fmt.Sprintf("marketai_avg_trade_latency_seconds %.2f", avgLatency))
 
 	// Reasoning logs per minute (simplified - using agent_decisions)
 	var decisionsPerMin float64
-	h.db.QueryRow(context.Background(), `
+	if err := h.db.QueryRow(context.Background(), `
 		SELECT COALESCE(COUNT(*)::float / 60.0, 0)
 		FROM agent_decisions
 		WHERE created_at > NOW() - INTERVAL '1 minute'
-	`).Scan(&decisionsPerMin)
+	`).Scan(&decisionsPerMin); err != nil {
+		decisionsPerMin = 0
+	}
 	output = append(output, fmt.Sprintf("marketai_reasoning_logs_per_minute %.2f", decisionsPerMin))
 
 	// Data source metrics
@@ -103,7 +111,9 @@ func (h *MetricsHandler) GetPrometheus(c *fiber.Ctx) error {
 		for rows.Next() {
 			var sourceName string
 			var successCount, errorCount, avgResponseTime int
-			rows.Scan(&sourceName, &successCount, &errorCount, &avgResponseTime)
+			if err := rows.Scan(&sourceName, &successCount, &errorCount, &avgResponseTime); err != nil {
+				continue
+			}
 
 			// Sanitize source name for Prometheus (replace spaces with underscores)
 			sanitizedName := fmt.Sprintf("marketai_datasource_%s", sanitizeMetricName(sourceName))

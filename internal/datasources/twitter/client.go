@@ -7,7 +7,7 @@ import (
 	"time"
 
 	m "github.com/1batu/market-ai/internal/models"
-	"github.com/dghubble/go-twitter/twitter"
+	"github.com/dghubble/go-twitter/twitter" //nolint:staticcheck // SA1019: deprecated package, will be replaced in future
 	"github.com/dghubble/oauth1"
 	"github.com/rs/zerolog/log"
 )

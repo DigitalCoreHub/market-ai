@@ -46,6 +46,12 @@ func main() {
 	defer db.Close()
 	log.Info().Msg("Connected to PostgreSQL")
 
+	// Run database migrations (checks if tables exist before applying)
+	if err := database.RunMigrations(context.Background(), db); err != nil {
+		log.Fatal().Err(err).Msg("Failed to run database migrations")
+	}
+	log.Info().Msg("Database migrations completed")
+
 	redisClient, err := database.NewRedisClient(cfg.Redis)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to Redis")

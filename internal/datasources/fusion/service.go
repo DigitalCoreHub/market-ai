@@ -166,6 +166,8 @@ func (svc *Service) MarketContext(ctx context.Context, symbols []string) (*model
 	if svc.analyzer != nil && len(tweets) > 0 {
 		if analyzed, err := svc.analyzer.AnalyzeBatch(ctx, tweets); err == nil {
 			tweets = analyzed
+		} else {
+			log.Error().Err(err).Msg("Sentiment analysis error")
 		}
 	}
 

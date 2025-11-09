@@ -229,6 +229,9 @@ func (ae *AgentEngine) processAgentDecision(
 
 		// İşlemi yayınla
 		ae.hub.BroadcastMessage("trade_executed", trade)
+	} else {
+		// HOLD action - no trade executed
+		log.Debug().Str("agent", agentName).Msg("Agent decided to HOLD - no trade executed")
 	}
 }
 

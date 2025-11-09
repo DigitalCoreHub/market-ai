@@ -70,6 +70,8 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 				balance, totalCost, tradeAmount, commission, int(balance/stockPrice))
 		}
 	}
+	// SELL action validation can be added here if needed
+	// For now, SELL actions are allowed without additional validation
 
 	// Portföy yoğunluğunu kontrol et
 	portfolioValue, err := rm.getPortfolioValue(ctx, agentID)
@@ -85,6 +87,8 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 			return fmt.Errorf("portfolio risk %.1f%% exceeds max %.1f%%", portfolioRisk, rm.maxPortfolioRisk)
 		}
 	}
+	// SELL action portfolio risk validation can be added here if needed
+	// For now, SELL actions are allowed without additional portfolio risk validation
 
 	return nil
 }

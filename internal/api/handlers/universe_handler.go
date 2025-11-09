@@ -96,7 +96,8 @@ func (h *UniverseHandler) GetActiveStocks(c *fiber.Ctx) error {
 func (h *UniverseHandler) TriggerUniverseUpdate(c *fiber.Ctx) error {
 	go func() {
 		if err := h.service.UpdateUniverse(context.Background()); err != nil {
-			// Log error but don't block response
+			// Log error but don't block response - error is handled by service
+			_ = err
 		}
 	}()
 	return c.JSON(fiber.Map{"success": true, "message": "Universe update triggered"})

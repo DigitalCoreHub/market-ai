@@ -28,6 +28,7 @@ func (te *TradingEngine) ExecuteTrade(ctx context.Context, req models.TradeReque
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil {
 			// Ignore rollback error if transaction was committed
+			_ = err
 		}
 	}()
 
@@ -103,6 +104,9 @@ func (te *TradingEngine) ExecuteTrade(ctx context.Context, req models.TradeReque
 		if err != nil {
 			return nil, fmt.Errorf("failed to update portfolio: %w", err)
 		}
+	} else {
+		// Invalid trade type
+		return nil, fmt.Errorf("invalid trade type: %s", req.TradeType)
 	}
 
 	trade := &models.Trade{

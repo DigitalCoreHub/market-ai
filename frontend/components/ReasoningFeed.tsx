@@ -1,5 +1,6 @@
 'use client';
 
+import { type WebSocketMessage } from '@/lib/websocket';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Brain, Minus, TrendingDown, TrendingUp } from 'lucide-react';
@@ -19,9 +20,9 @@ interface Decision {
   timestamp: number;
 }
 
-interface WebSocketMessage {
-  type: string;
-  data: Decision | Record<string, unknown>;
+interface AgentThinkingData {
+  agent_id: string;
+  agent_name: string;
   timestamp: number;
 }
 
@@ -34,9 +35,9 @@ export default function ReasoningFeed({ lastMessage }: { lastMessage: WebSocketM
     if (!lastMessage) return;
 
     if (lastMessage.type === 'agent_thinking') {
-      const data = lastMessage.data;
+      const data = lastMessage.data as AgentThinkingData | Record<string, unknown>;
       if (data && typeof data === 'object' && 'agent_id' in data) {
-        const agentId = (data as Record<string, unknown>).agent_id;
+        const agentId = data.agent_id;
         if (typeof agentId === 'string' && agentId) {
           setThinkingAgents(prev => new Set(prev).add(agentId));
         }
@@ -44,8 +45,10 @@ export default function ReasoningFeed({ lastMessage }: { lastMessage: WebSocketM
     }
 
     if (lastMessage.type === 'agent_decision') {
-      const data = lastMessage.data;
+      const data = lastMessage.data as Decision | Record<string, unknown>;
       if (
+        data &&
+        typeof data === 'object' &&
         typeof data.agent_id === 'string' &&
         typeof data.agent_name === 'string' &&
         typeof data.decision_id === 'string' &&

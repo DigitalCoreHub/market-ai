@@ -56,7 +56,21 @@ export default function Dashboard() {
   useEffect(() => {
     fetch('http://localhost:8080/api/v1/agents')
       .then(res => res.json())
-      .then(data => setAgents(data.data || []));
+      .then((data: { success?: boolean; data?: unknown }) => {
+        if (data.data && Array.isArray(data.data)) {
+          const agents = data.data.filter((agent): agent is Agent =>
+            agent &&
+            typeof agent === 'object' &&
+            typeof agent.id === 'string' &&
+            typeof agent.name === 'string' &&
+            typeof agent.model === 'string' &&
+            typeof agent.current_balance === 'number' &&
+            typeof agent.status === 'string'
+          );
+          setAgents(agents);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Initialize ref with agents when they change

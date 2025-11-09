@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-
 	"github.com/1batu/market-ai/internal/services"
 	"github.com/gofiber/fiber/v2"
 )

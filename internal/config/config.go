@@ -14,6 +14,8 @@ type Config struct {
 	News        NewsConfig
 	AI          AIConfig
 	Leaderboard LeaderboardConfig
+	DataSources DataSourcesConfig
+	Auth        AuthConfig
 }
 
 type ServerConfig struct {
@@ -81,6 +83,27 @@ type LeaderboardConfig struct {
 	UpdateInterval int // seconds
 }
 
+// DataSourcesConfig v0.5 multi-source collection configuration
+type DataSourcesConfig struct {
+	YahooFetchInterval      int
+	ScraperFetchInterval    int
+	TwitterFetchInterval    int
+	SentimentUpdateInterval int
+
+	TwitterAPIKey       string
+	TwitterAPISecret    string
+	TwitterAccessToken  string
+	TwitterAccessSecret string
+
+	SymbolUniverse string // comma-separated symbols (e.g. THYAO,AKBNK,ASELS)
+}
+
+// AuthConfig v1.0 authentication configuration
+type AuthConfig struct {
+	JWTSecret string // JWT signing secret
+	APIKey    string // Master API key for authentication
+}
+
 // Load .env dosyasından konfigürasyonu yükler
 func Load() (*Config, error) {
 	viper.SetConfigName(".env")
@@ -145,6 +168,22 @@ func Load() (*Config, error) {
 		},
 		Leaderboard: LeaderboardConfig{
 			UpdateInterval: viper.GetInt("LEADERBOARD_UPDATE_INTERVAL"),
+		},
+		DataSources: DataSourcesConfig{
+			YahooFetchInterval:      viper.GetInt("YAHOO_FETCH_INTERVAL"),
+			ScraperFetchInterval:    viper.GetInt("SCRAPER_FETCH_INTERVAL"),
+			TwitterFetchInterval:    viper.GetInt("TWITTER_FETCH_INTERVAL"),
+			SentimentUpdateInterval: viper.GetInt("SENTIMENT_UPDATE_INTERVAL"),
+
+			TwitterAPIKey:       viper.GetString("TWITTER_API_KEY"),
+			TwitterAPISecret:    viper.GetString("TWITTER_API_SECRET"),
+			TwitterAccessToken:  viper.GetString("TWITTER_ACCESS_TOKEN"),
+			TwitterAccessSecret: viper.GetString("TWITTER_ACCESS_SECRET"),
+			SymbolUniverse:      viper.GetString("SYMBOL_UNIVERSE"),
+		},
+		Auth: AuthConfig{
+			JWTSecret: viper.GetString("JWT_SECRET"),
+			APIKey:    viper.GetString("API_KEY"),
 		},
 	}
 

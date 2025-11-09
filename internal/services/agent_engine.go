@@ -12,11 +12,12 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/1batu/market-ai/internal/ai"
+	"github.com/1batu/market-ai/internal/datasources/fusion"
 	"github.com/1batu/market-ai/internal/models"
 	"github.com/1batu/market-ai/internal/websocket"
 )
 
-// AgentEngine orchestrates autonomous trading for agents
+// AgentEngine ajanlar için otonom ticareti düzenler
 type AgentEngine struct {
 	db             *pgxpool.Pool
 	redis          *redis.Client
@@ -27,9 +28,13 @@ type AgentEngine struct {
 	aiClients      map[uuid.UUID]ai.Client
 	minInterval    time.Duration
 	maxInterval    time.Duration
+
+	// v0.5 bağlam
+	fusionService  *fusion.Service
+	contextSymbols []string
 }
 
-// NewAgentEngine creates a new agent engine
+// NewAgentEngine yeni bir ajan motoru oluşturur
 func NewAgentEngine(
 	db *pgxpool.Pool,
 	redis *redis.Client,
@@ -52,7 +57,13 @@ func NewAgentEngine(
 	}
 }
 
-// RegisterAgent registers an AI client for an agent
+// SetFusionService piyasa bağlamı füzyon servisini enjekte eder
+func (ae *AgentEngine) SetFusionService(fs *fusion.Service) { ae.fusionService = fs }
+
+// SetContextSymbols piyasa bağlamı için kullanılacak sembolleri yapılandırır
+func (ae *AgentEngine) SetContextSymbols(symbols []string) { ae.contextSymbols = symbols }
+
+// RegisterAgent bir ajan için YZ istemcisi kaydeder
 func (ae *AgentEngine) RegisterAgent(agentID uuid.UUID, client ai.Client) {
 	ae.aiClients[agentID] = client
 	log.Info().
@@ -61,7 +72,7 @@ func (ae *AgentEngine) RegisterAgent(agentID uuid.UUID, client ai.Client) {
 		Msg("AI agent registered")
 }
 
-// Start begins the autonomous agent decision loop
+// Start otonom ajan karar döngüsünü başlatır
 func (ae *AgentEngine) Start(ctx context.Context) {
 	log.Info().
 		Dur("min_interval", ae.minInterval).
@@ -74,21 +85,21 @@ func (ae *AgentEngine) Start(ctx context.Context) {
 			log.Info().Msg("Agent engine stopped")
 			return
 		default:
-			// Calculate random sleep duration
+			// Rastgele uyku süresini hesapla
 			randomDuration := time.Duration(rand.Int63n(int64(ae.maxInterval-ae.minInterval))) + ae.minInterval
 
 			log.Debug().Dur("next_decision_in", randomDuration).Msg("Waiting for next decision cycle")
 			time.Sleep(randomDuration)
 
-			// Process all agents
+			// Tüm ajanları işle
 			ae.processAllAgents(ctx)
 		}
 	}
 }
 
-// processAllAgents makes decisions for all active agents
+// processAllAgents tüm aktif ajanlar için kararlar verir
 func (ae *AgentEngine) processAllAgents(ctx context.Context) {
-	// Get all active agents
+	// Tüm aktif ajanları al
 	query := `SELECT id, name, model, current_balance FROM agents WHERE status = 'active'`
 	rows, err := ae.db.Query(ctx, query)
 	if err != nil {
@@ -107,19 +118,19 @@ func (ae *AgentEngine) processAllAgents(ctx context.Context) {
 			continue
 		}
 
-		// Check if AI client exists
+		// YZ istemcisinin var olup olmadığını kontrol et
 		aiClient, exists := ae.aiClients[agentID]
 		if !exists {
 			log.Warn().Str("agent_id", agentID.String()).Msg("No AI client registered")
 			continue
 		}
 
-		// Process in goroutine
+		// Goroutine içinde işle
 		go ae.processAgentDecision(ctx, agentID, agentName, balance, aiClient)
 	}
 }
 
-// processAgentDecision makes a trading decision for a single agent
+// processAgentDecision tek bir ajan için ticaret kararı verir
 func (ae *AgentEngine) processAgentDecision(
 	ctx context.Context,
 	agentID uuid.UUID,
@@ -129,24 +140,24 @@ func (ae *AgentEngine) processAgentDecision(
 ) {
 	log.Debug().Str("agent", agentName).Msg("Processing agent decision")
 
-	// Broadcast "thinking" status
+	// "Düşünüyor" durumunu yayınla
 	ae.hub.BroadcastMessage("agent_thinking", map[string]interface{}{
 		"agent_id":   agentID,
 		"agent_name": agentName,
 		"timestamp":  time.Now().Unix(),
 	})
 
-	// Gather data for decision
+	// Karar için veri topla
 	decisionReq, err := ae.gatherDecisionData(ctx, agentID, agentName, balance)
 	if err != nil {
 		log.Error().Err(err).Str("agent", agentName).Msg("Failed to gather decision data")
 		return
 	}
 
-	// Build prompt
+	// Prompt oluştur
 	prompt := ai.BuildDecisionPrompt(decisionReq)
 
-	// Get AI decision
+	// YZ kararını al
 	aiDecision, err := aiClient.GetTradingDecision(ctx, prompt)
 	if err != nil {
 		log.Error().Err(err).Str("agent", agentName).Msg("Failed to get AI decision")
@@ -160,14 +171,14 @@ func (ae *AgentEngine) processAgentDecision(
 		Float64("confidence", aiDecision.Confidence).
 		Msg("AI decision received")
 
-	// Store decision
+	// Kararı kaydet
 	decisionID, err := ae.storeDecision(ctx, agentID, aiDecision)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to store decision")
 		return
 	}
 
-	// Broadcast decision
+	// Kararı yayınla
 	ae.hub.BroadcastMessage("agent_decision", map[string]interface{}{
 		"agent_id":          agentID,
 		"agent_name":        agentName,
@@ -182,9 +193,9 @@ func (ae *AgentEngine) processAgentDecision(
 		"timestamp":         time.Now().Unix(),
 	})
 
-	// Execute trade if not HOLD
+	// HOLD değilse işlemi gerçekleştir
 	if aiDecision.Action != "HOLD" {
-		// Validate with risk manager
+		// Risk yöneticisi ile doğrula
 		if err := ae.riskManager.ValidateTrade(ctx, agentID, aiDecision); err != nil {
 			log.Warn().Err(err).Str("agent", agentName).Msg("Trade rejected by risk manager")
 			ae.hub.BroadcastMessage("trade_rejected", map[string]interface{}{
@@ -196,7 +207,7 @@ func (ae *AgentEngine) processAgentDecision(
 			return
 		}
 
-		// Execute trade
+		// İşlemi gerçekleştir
 		tradeReq := models.TradeRequest{
 			AgentID:     agentID,
 			StockSymbol: aiDecision.StockSymbol,
@@ -216,12 +227,12 @@ func (ae *AgentEngine) processAgentDecision(
 			Str("trade_id", trade.ID.String()).
 			Msg("Trade executed successfully")
 
-		// Broadcast trade
+		// İşlemi yayınla
 		ae.hub.BroadcastMessage("trade_executed", trade)
 	}
 }
 
-// gatherDecisionData collects all data needed for a decision
+// gatherDecisionData bir karar için gereken tüm verileri toplar
 func (ae *AgentEngine) gatherDecisionData(
 	ctx context.Context,
 	agentID uuid.UUID,
@@ -235,14 +246,16 @@ func (ae *AgentEngine) gatherDecisionData(
 		Strategy:       "balanced",
 	}
 
-	// Get portfolio
+	// Portföyü al (güncel fiyat ile hesapla)
 	portfolioQuery := `
-		SELECT stock_symbol, quantity, avg_buy_price, COALESCE(quantity * $1, 0) as current_value,
-		       COALESCE(quantity * $1 - total_invested, 0) as profit_loss
-		FROM portfolio WHERE agent_id = $2
+		SELECT p.stock_symbol, p.quantity, p.avg_buy_price,
+			   COALESCE(p.quantity * s.current_price, 0) as current_value,
+			   COALESCE(p.quantity * s.current_price - p.total_invested, 0) as profit_loss
+		FROM portfolio p
+		JOIN stocks s ON s.symbol = p.stock_symbol
+		WHERE p.agent_id = $1
 	`
-	// Note: This is simplified - in production you'd join with stocks table
-	rows, err := ae.db.Query(ctx, portfolioQuery, 100, agentID) // 100 is placeholder price
+	rows, err := ae.db.Query(ctx, portfolioQuery, agentID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -254,7 +267,7 @@ func (ae *AgentEngine) gatherDecisionData(
 		}
 	}
 
-	// Get stocks
+	// Hisseleri al
 	stocksQuery := `SELECT symbol, name, current_price, change_percent, volume FROM stocks ORDER BY symbol LIMIT 20`
 	rows, err = ae.db.Query(ctx, stocksQuery)
 	if err == nil {
@@ -268,7 +281,7 @@ func (ae *AgentEngine) gatherDecisionData(
 		}
 	}
 
-	// Get recent trades
+	// Son işlemleri al
 	tradesQuery := `
 		SELECT stock_symbol, trade_type, quantity, price, reasoning, created_at
 		FROM trades WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 5
@@ -285,7 +298,7 @@ func (ae *AgentEngine) gatherDecisionData(
 		}
 	}
 
-	// Get latest news from aggregator
+	// Toplayıcıdan en son haberleri al
 	if latestNews, err := ae.newsAggregator.GetLatestNews(ctx); err == nil {
 		req.News = latestNews
 		req.NewsCount = len(latestNews)
@@ -294,19 +307,31 @@ func (ae *AgentEngine) gatherDecisionData(
 		req.NewsCount = 0
 	}
 
+	// Piyasa Bağlamı (füzyonlanmış) - füzyon servisi mevcutsa isteğe bağlı
+	if ae.fusionService != nil && len(ae.contextSymbols) > 0 {
+		if mc, err := ae.fusionService.MarketContext(ctx, ae.contextSymbols); err == nil && mc != nil {
+			req.MCPrices = mc.Prices
+			req.MCSentiments = mc.StockSentiments
+			if len(mc.Tweets) > 0 {
+				req.MCTopTweets = mc.Tweets
+			}
+			req.MCNotes = "Context aggregated from multi-source feed; consider sentiment extremes and sudden volume spikes."
+		}
+	}
+
 	return req, nil
 }
 
-// storeDecision stores an AI decision in the database
+// storeDecision bir YZ kararını veritabanına kaydeder
 func (ae *AgentEngine) storeDecision(ctx context.Context, agentID uuid.UUID, decision *models.AIDecision) (uuid.UUID, error) {
 	decisionID := uuid.New()
 
-	// Marshal market context
+	// Piyasa bağlamını marshal et
 	marketContext, _ := json.Marshal(map[string]interface{}{
 		"timestamp": time.Now(),
 	})
 
-	// Calculate risk score
+	// Risk skorunu hesapla
 	riskScore := 100.0 - decision.Confidence
 
 	query := `
@@ -326,7 +351,7 @@ func (ae *AgentEngine) storeDecision(ctx context.Context, agentID uuid.UUID, dec
 		return uuid.Nil, err
 	}
 
-	// Store thinking steps
+	// Düşünme adımlarını kaydet
 	for i, step := range decision.ThinkingSteps {
 		thoughtQuery := `
 			INSERT INTO agent_thoughts (agent_id, decision_id, step_number, step_name, thought)

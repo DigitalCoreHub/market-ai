@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/1batu/market-ai/internal/api/handlers"
+	"github.com/1batu/market-ai/internal/middleware"
 	"github.com/1batu/market-ai/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 )
@@ -14,6 +15,11 @@ func SetupRoutes(
 	tradeHandler *handlers.TradeHandler,
 	leaderboardHandler *handlers.LeaderboardHandler,
 	roiHistoryHandler *handlers.ROIHistoryHandler,
+	marketCtxHandler *handlers.MarketContextHandler,
+	debugHandler *handlers.DebugDataHandler,
+	metricsHandler *handlers.MetricsHandler,
+	universeHandler *handlers.UniverseHandler,
+	authHandler *handlers.AuthHandler,
 	hub *websocket.Hub,
 ) {
 	app.Get("/health", healthHandler.Check)
@@ -21,6 +27,10 @@ func SetupRoutes(
 
 	v1 := app.Group("/api/v1")
 	v1.Get("/ping", healthHandler.Ping)
+
+	// Auth routes (public)
+	auth := v1.Group("/auth")
+	auth.Post("/login", authHandler.Login)
 
 	agents := v1.Group("/agents")
 	agents.Get("/", agentHandler.GetAll)
@@ -40,4 +50,23 @@ func SetupRoutes(
 	// Leaderboard
 	v1.Get("/leaderboard", leaderboardHandler.GetLeaderboard)
 	v1.Get("/leaderboard/roi-history", roiHistoryHandler.GetAllAgentsROIHistory)
+
+	// Market context (v0.5)
+	v1.Get("/market/context", marketCtxHandler.GetContext)
+
+	// Metrics endpoint (observability)
+	v1.Get("/metrics", metricsHandler.Get)
+	v1.Get("/metrics/prometheus", metricsHandler.GetPrometheus)
+
+	// Dynamic stock universe endpoints
+	universe := v1.Group("/universe")
+	universe.Get("/active", universeHandler.GetActiveStocks)
+	universe.Post("/update", middleware.APIKeyOrJWTProtected(), universeHandler.TriggerUniverseUpdate) // Protected (API key or JWT)
+	universe.Get("/history", universeHandler.GetUniverseHistory)
+
+	// Debug endpoints (per-source)
+	dbg := v1.Group("/debug")
+	dbg.Get("/yahoo", debugHandler.GetYahoo)
+	dbg.Get("/scraper", debugHandler.GetScraper)
+	dbg.Get("/tweets", debugHandler.GetTweets)
 }

@@ -68,18 +68,39 @@ func main() {
 	defer cancel()
 
 	// === HABER TOPLAYICI (30 dk döngü) ===
-	rssFeeds := strings.Split(cfg.News.Feeds, ",")
+	// RSS feeds'i parse et (boş string ise boş array)
+	var rssFeeds []string
+	if cfg.News.Feeds != "" {
+		rssFeeds = strings.Split(cfg.News.Feeds, ",")
+		// Trim whitespace
+		for i, feed := range rssFeeds {
+			rssFeeds[i] = strings.TrimSpace(feed)
+		}
+	}
+
+	// Update interval kontrolü (minimum 1 dakika)
+	updateInterval := time.Duration(cfg.News.UpdateInterval) * time.Minute
+	if updateInterval <= 0 {
+		updateInterval = 30 * time.Minute // Default: 30 minutes
+	}
+
+	// Cache TTL kontrolü (minimum 1 dakika)
+	cacheTTL := time.Duration(cfg.News.CacheTTL) * time.Minute
+	if cacheTTL <= 0 {
+		cacheTTL = 60 * time.Minute // Default: 60 minutes
+	}
+
 	newsAggregator := services.NewNewsAggregator(
 		db,
 		redisClient,
 		hub,
 		cfg.News.APIKey,
 		rssFeeds,
-		time.Duration(cfg.News.UpdateInterval)*time.Minute,
-		time.Duration(cfg.News.CacheTTL)*time.Minute,
+		updateInterval,
+		cacheTTL,
 	)
 	go newsAggregator.Start(ctx)
-	log.Info().Msg("News aggregator started (30 min cycle)")
+	log.Info().Dur("interval", updateInterval).Msg("News aggregator started")
 
 	// === TİCARET MOTORU & RİSK YÖNETİCİSİ ===
 	tradingEngine := services.NewTradingEngine(db)

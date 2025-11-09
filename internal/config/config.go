@@ -148,6 +148,24 @@ func parseDatabaseURL() DatabaseConfig {
 	}
 }
 
+// getIntWithDefault returns environment variable as int, or default value if not set or 0
+func getIntWithDefault(key string, defaultValue int) int {
+	value := viper.GetInt(key)
+	if value == 0 {
+		return defaultValue
+	}
+	return value
+}
+
+// getFloat64WithDefault returns environment variable as float64, or default value if not set or 0
+func getFloat64WithDefault(key string, defaultValue float64) float64 {
+	value := viper.GetFloat64(key)
+	if value == 0 {
+		return defaultValue
+	}
+	return value
+}
+
 // parseRedisURL parses REDIS_URL and returns RedisConfig
 // Supports both REDIS_URL and individual REDIS_* variables
 func parseRedisURL() RedisConfig {
@@ -208,8 +226,8 @@ func Load() (*Config, error) {
 		},
 		News: NewsConfig{
 			APIKey:         viper.GetString("NEWS_API_KEY"),
-			UpdateInterval: viper.GetInt("NEWS_UPDATE_INTERVAL"),
-			CacheTTL:       viper.GetInt("NEWS_CACHE_TTL"),
+			UpdateInterval: getIntWithDefault("NEWS_UPDATE_INTERVAL", 30), // Default: 30 minutes
+			CacheTTL:       getIntWithDefault("NEWS_CACHE_TTL", 60),       // Default: 60 minutes
 			Feeds:          viper.GetString("RSS_FEEDS"),
 		},
 		AI: AIConfig{
@@ -217,8 +235,8 @@ func Load() (*Config, error) {
 			AnthropicKey: viper.GetString("ANTHROPIC_API_KEY"),
 			GPTModel:     viper.GetString("AI_MODEL_GPT"),
 			ClaudeModel:  viper.GetString("AI_MODEL_CLAUDE"),
-			Temperature:  viper.GetFloat64("AI_TEMPERATURE"),
-			MaxTokens:    viper.GetInt("AI_MAX_TOKENS"),
+			Temperature:  getFloat64WithDefault("AI_TEMPERATURE", 0.7), // Default: 0.7
+			MaxTokens:    getIntWithDefault("AI_MAX_TOKENS", 2000),   // Default: 2000
 
 			GoogleKey:     viper.GetString("GOOGLE_API_KEY"),
 			GoogleModel:   viper.GetString("AI_MODEL_GEMINI"),
@@ -236,13 +254,13 @@ func Load() (*Config, error) {
 			EnablePremiumModels: viper.GetBool("ENABLE_PREMIUM_MODELS"),
 		},
 		Leaderboard: LeaderboardConfig{
-			UpdateInterval: viper.GetInt("LEADERBOARD_UPDATE_INTERVAL"),
+			UpdateInterval: getIntWithDefault("LEADERBOARD_UPDATE_INTERVAL", 60), // Default: 60 seconds
 		},
 		DataSources: DataSourcesConfig{
-			YahooFetchInterval:      viper.GetInt("YAHOO_FETCH_INTERVAL"),
-			ScraperFetchInterval:    viper.GetInt("SCRAPER_FETCH_INTERVAL"),
-			TwitterFetchInterval:    viper.GetInt("TWITTER_FETCH_INTERVAL"),
-			SentimentUpdateInterval: viper.GetInt("SENTIMENT_UPDATE_INTERVAL"),
+			YahooFetchInterval:      getIntWithDefault("YAHOO_FETCH_INTERVAL", 300),      // Default: 5 minutes
+			ScraperFetchInterval:    getIntWithDefault("SCRAPER_FETCH_INTERVAL", 600),   // Default: 10 minutes
+			TwitterFetchInterval:    getIntWithDefault("TWITTER_FETCH_INTERVAL", 900),   // Default: 15 minutes
+			SentimentUpdateInterval: getIntWithDefault("SENTIMENT_UPDATE_INTERVAL", 1800), // Default: 30 minutes
 
 			TwitterAPIKey:       viper.GetString("TWITTER_API_KEY"),
 			TwitterAPISecret:    viper.GetString("TWITTER_API_SECRET"),

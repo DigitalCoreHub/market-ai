@@ -69,6 +69,9 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 			return fmt.Errorf("insufficient balance: %.2f TL < %.2f TL (trade: %.2f + commission: %.2f) - reduce to %d lots",
 				balance, totalCost, tradeAmount, commission, int(balance/stockPrice))
 		}
+	} else if decision.Action == "SELL" {
+		// SELL action validation can be added here if needed
+		_ = decision.Action
 	}
 
 	// Portföy yoğunluğunu kontrol et
@@ -84,6 +87,9 @@ func (rm *RiskManager) ValidateTrade(ctx context.Context, agentID uuid.UUID, dec
 		if portfolioRisk > rm.maxPortfolioRisk {
 			return fmt.Errorf("portfolio risk %.1f%% exceeds max %.1f%%", portfolioRisk, rm.maxPortfolioRisk)
 		}
+	} else if decision.Action == "SELL" {
+		// SELL action portfolio risk validation can be added here if needed
+		_ = decision.Action
 	}
 
 	return nil

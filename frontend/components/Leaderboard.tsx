@@ -47,11 +47,29 @@ export default function Leaderboard() {
   useWebSocket('ws://localhost:8080/ws', {
     onMessage: (msg) => {
       if (msg.type === 'leaderboard_updated') {
-        setEntries(msg.data);
-        // After a leaderboard update, refresh ROI history if stale (>30s)
-        const now = Date.now();
-        if (now - lastHistoryFetch > 30000) {
-          fetchROIHistory();
+        const data = msg.data;
+        if (Array.isArray(data)) {
+          const entries = data.filter((entry): entry is LeaderboardEntry =>
+            entry &&
+            typeof entry === 'object' &&
+            typeof entry.rank === 'number' &&
+            typeof entry.agent_id === 'string' &&
+            typeof entry.agent_name === 'string' &&
+            typeof entry.model === 'string' &&
+            typeof entry.roi === 'number' &&
+            typeof entry.profit_loss === 'number' &&
+            typeof entry.win_rate === 'number' &&
+            typeof entry.total_trades === 'number' &&
+            typeof entry.balance === 'number' &&
+            typeof entry.portfolio_value === 'number' &&
+            typeof entry.total_value === 'number'
+          );
+          setEntries(entries);
+          // After a leaderboard update, refresh ROI history if stale (>30s)
+          const now = Date.now();
+          if (now - lastHistoryFetch > 30000) {
+            fetchROIHistory();
+          }
         }
       }
     },

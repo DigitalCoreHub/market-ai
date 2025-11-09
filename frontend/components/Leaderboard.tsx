@@ -27,17 +27,24 @@ export default function Leaderboard() {
   const fetchROIHistory = () => {
     fetch('http://localhost:8080/api/v1/leaderboard/roi-history?limit=120')
       .then(r => r.json())
-      .then(d => {
-        if (d.success && d.data) {
+      .then((d: { success?: boolean; data?: unknown }) => {
+        if (d.success && d.data && typeof d.data === 'object' && d.data !== null) {
           type RawPoint = { time: string; roi: number };
           const transformed: Record<string, RawPoint[]> = {};
-          Object.entries(d.data as Record<string, RawPoint[]>)
-            .forEach(([agentId, points]) => {
-              const sorted = points
+          Object.entries(d.data as Record<string, unknown>).forEach(([agentId, points]) => {
+            if (Array.isArray(points)) {
+              const validPoints = points
+                .filter((p): p is RawPoint =>
+                  p &&
+                  typeof p === 'object' &&
+                  typeof (p as RawPoint).time === 'string' &&
+                  typeof (p as RawPoint).roi === 'number'
+                )
                 .map(p => ({ time: p.time, roi: p.roi }))
                 .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-              transformed[agentId] = sorted;
-            });
+              transformed[agentId] = validPoints;
+            }
+          });
           setRoiHistory(transformed);
           setLastHistoryFetch(Date.now());
         }
@@ -47,11 +54,29 @@ export default function Leaderboard() {
   useWebSocket('ws://localhost:8080/ws', {
     onMessage: (msg) => {
       if (msg.type === 'leaderboard_updated') {
-        setEntries(msg.data);
-        // After a leaderboard update, refresh ROI history if stale (>30s)
-        const now = Date.now();
-        if (now - lastHistoryFetch > 30000) {
-          fetchROIHistory();
+        const data = msg.data;
+        if (Array.isArray(data)) {
+          const entries = data.filter((entry): entry is LeaderboardEntry =>
+            entry &&
+            typeof entry === 'object' &&
+            typeof entry.rank === 'number' &&
+            typeof entry.agent_id === 'string' &&
+            typeof entry.agent_name === 'string' &&
+            typeof entry.model === 'string' &&
+            typeof entry.roi === 'number' &&
+            typeof entry.profit_loss === 'number' &&
+            typeof entry.win_rate === 'number' &&
+            typeof entry.total_trades === 'number' &&
+            typeof entry.balance === 'number' &&
+            typeof entry.portfolio_value === 'number' &&
+            typeof entry.total_value === 'number'
+          );
+          setEntries(entries);
+          // After a leaderboard update, refresh ROI history if stale (>30s)
+          const now = Date.now();
+          if (now - lastHistoryFetch > 30000) {
+            fetchROIHistory();
+          }
         }
       }
     },
@@ -60,7 +85,26 @@ export default function Leaderboard() {
   useEffect(() => {
     fetch('http://localhost:8080/api/v1/leaderboard')
       .then(r => r.json())
-      .then(d => setEntries(d.data || []))
+      .then((d: { success?: boolean; data?: unknown }) => {
+        if (d.data && Array.isArray(d.data)) {
+          const entries = d.data.filter((entry): entry is LeaderboardEntry =>
+            entry &&
+            typeof entry === 'object' &&
+            typeof entry.rank === 'number' &&
+            typeof entry.agent_id === 'string' &&
+            typeof entry.agent_name === 'string' &&
+            typeof entry.model === 'string' &&
+            typeof entry.roi === 'number' &&
+            typeof entry.profit_loss === 'number' &&
+            typeof entry.win_rate === 'number' &&
+            typeof entry.total_trades === 'number' &&
+            typeof entry.balance === 'number' &&
+            typeof entry.portfolio_value === 'number' &&
+            typeof entry.total_value === 'number'
+          );
+          setEntries(entries);
+        }
+      })
       .catch(() => {});
     fetchROIHistory();
   }, []);

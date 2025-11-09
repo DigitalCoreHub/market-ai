@@ -1,5 +1,6 @@
 'use client';
 
+import { type WebSocketMessage } from '@/lib/websocket';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Brain, Minus, TrendingDown, TrendingUp } from 'lucide-react';
@@ -19,9 +20,9 @@ interface Decision {
   timestamp: number;
 }
 
-interface WebSocketMessage {
-  type: string;
-  data: Decision | Record<string, unknown>;
+interface AgentThinkingData {
+  agent_id: string;
+  agent_name: string;
   timestamp: number;
 }
 
@@ -34,33 +35,55 @@ export default function ReasoningFeed({ lastMessage }: { lastMessage: WebSocketM
     if (!lastMessage) return;
 
     if (lastMessage.type === 'agent_thinking') {
-      const agentId = lastMessage.data.agent_id;
-      setThinkingAgents(prev => new Set(prev).add(agentId));
+      const data = lastMessage.data;
+      if (data && typeof data === 'object' && data !== null && 'agent_id' in data) {
+        const typedData = data as Record<string, unknown>;
+        const agentIdValue = typedData.agent_id;
+        if (typeof agentIdValue === 'string' && agentIdValue.length > 0) {
+          const agentId: string = agentIdValue;
+          setThinkingAgents(prev => new Set(prev).add(agentId));
+        }
+      }
     }
 
     if (lastMessage.type === 'agent_decision') {
-      const decision: Decision = {
-        agent_id: lastMessage.data.agent_id,
-        agent_name: lastMessage.data.agent_name,
-        decision_id: lastMessage.data.decision_id,
-        action: lastMessage.data.action,
-        stock_symbol: lastMessage.data.stock_symbol,
-        quantity: lastMessage.data.quantity,
-        reasoning_summary: lastMessage.data.reasoning_summary,
-        confidence: lastMessage.data.confidence,
-        risk_level: lastMessage.data.risk_level,
-        thinking_steps: lastMessage.data.thinking_steps || [],
-        timestamp: lastMessage.data.timestamp || lastMessage.timestamp,
-      };
+      const data = lastMessage.data as Decision | Record<string, unknown>;
+      if (
+        data &&
+        typeof data === 'object' &&
+        typeof data.agent_id === 'string' &&
+        typeof data.agent_name === 'string' &&
+        typeof data.decision_id === 'string' &&
+        typeof data.action === 'string' &&
+        typeof data.stock_symbol === 'string' &&
+        typeof data.quantity === 'number' &&
+        typeof data.reasoning_summary === 'string' &&
+        typeof data.confidence === 'number' &&
+        typeof data.risk_level === 'string'
+      ) {
+        const decision: Decision = {
+          agent_id: data.agent_id,
+          agent_name: data.agent_name,
+          decision_id: data.decision_id,
+          action: data.action as 'BUY' | 'SELL' | 'HOLD',
+          stock_symbol: data.stock_symbol,
+          quantity: data.quantity,
+          reasoning_summary: data.reasoning_summary,
+          confidence: data.confidence,
+          risk_level: data.risk_level as 'low' | 'medium' | 'high',
+          thinking_steps: Array.isArray(data.thinking_steps) ? data.thinking_steps as Array<{ step: string; observation: string }> : [],
+          timestamp: typeof data.timestamp === 'number' ? data.timestamp : lastMessage.timestamp,
+        };
 
-      setDecisions(prev => [decision, ...prev].slice(0, 10));
+        setDecisions(prev => [decision, ...prev].slice(0, 10));
 
-      // Remove from thinking agents
-      setThinkingAgents(prev => {
-        const next = new Set(prev);
-        next.delete(decision.agent_id);
-        return next;
-      });
+        // Remove from thinking agents
+        setThinkingAgents(prev => {
+          const next = new Set(prev);
+          next.delete(decision.agent_id);
+          return next;
+        });
+      }
     }
   }, [lastMessage]);
 

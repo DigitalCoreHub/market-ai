@@ -1,5 +1,6 @@
 'use client';
 
+import { type WebSocketMessage } from '@/lib/websocket';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { AlertCircle, ExternalLink, Newspaper, TrendingUp } from 'lucide-react';
@@ -16,12 +17,6 @@ interface NewsArticle {
   impact_level?: string;
 }
 
-interface WebSocketMessage {
-  type: string;
-  data: NewsArticle[] | Record<string, unknown>;
-  timestamp: number;
-}
-
 export default function LatestNews({ lastMessage }: { lastMessage: WebSocketMessage | null }) {
   const [news, setNews] = useState<NewsArticle[]>([]);
 
@@ -29,8 +24,19 @@ export default function LatestNews({ lastMessage }: { lastMessage: WebSocketMess
   useEffect(() => {
     if (!lastMessage || lastMessage.type !== 'news_update') return;
 
-    const articles = (lastMessage.data as NewsArticle[]) || [];
-    setNews(articles);
+    const data = lastMessage.data;
+    if (Array.isArray(data)) {
+      const articles = data.filter((article): article is NewsArticle =>
+        article &&
+        typeof article === 'object' &&
+        typeof article.id === 'string' &&
+        typeof article.title === 'string' &&
+        typeof article.source === 'string' &&
+        typeof article.url === 'string' &&
+        typeof article.published_at === 'string'
+      );
+      setNews(articles);
+    }
   }, [lastMessage]);
 
   const getImpactColor = (level?: string) => {

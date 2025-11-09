@@ -24,6 +24,30 @@ docker-down: ## Stop Docker services
 docker-logs: ## View Docker logs
 	docker-compose logs -f
 
+up: ## Alias for docker-up
+	docker-compose up -d
+
+down: ## Alias for docker-down
+	docker-compose down
+
+logs: ## Alias for docker-logs
+	docker-compose logs -f
+
+docker-build: ## Build Docker image
+	docker-compose build
+
+docker-restart: ## Restart Docker services
+	docker-compose restart
+
+docker-up-monitoring: ## Start Docker services with monitoring (Prometheus + Grafana)
+	docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+db-migrate-006: ## Apply migration 006 (data sources) into running Postgres container
+	docker exec -i marketai-postgres psql -U marketai -d marketai_dev -f /docker-entrypoint-initdb.d/006_data_sources.sql
+
+db-verify-datasources: ## Verify v0.5 tables exist
+	docker exec -i marketai-postgres psql -U marketai -d marketai_dev -c "SELECT to_regclass('public.price_sources') AS price_sources, to_regclass('public.twitter_sentiment') AS twitter_sentiment, to_regclass('public.scraped_articles') AS scraped_articles;"
+
 install: ## Install dependencies
 	go mod download
 	go mod tidy

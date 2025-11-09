@@ -36,10 +36,11 @@ export default function ReasoningFeed({ lastMessage }: { lastMessage: WebSocketM
 
     if (lastMessage.type === 'agent_thinking') {
       const data = lastMessage.data;
-      if (data && typeof data === 'object' && 'agent_id' in data) {
+      if (data && typeof data === 'object' && data !== null && 'agent_id' in data) {
         const typedData = data as Record<string, unknown>;
-        const agentId = typedData.agent_id;
-        if (typeof agentId === 'string' && agentId) {
+        const agentIdValue = typedData.agent_id;
+        if (typeof agentIdValue === 'string' && agentIdValue.length > 0) {
+          const agentId: string = agentIdValue;
           setThinkingAgents(prev => new Set(prev).add(agentId));
         }
       }

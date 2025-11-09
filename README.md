@@ -52,7 +52,7 @@ Türkiye odaklı, çoklu veri kaynağı ve çoklu model desteği ile AI tabanlı
 
 ## Kurulum ve Çalıştırma
 
-Önkoşullar: Go 1.23+, Docker, Docker Compose, Node 20+ (frontend için - opsiyonel).
+Önkoşullar: Go 1.24+, Docker, Docker Compose, Node 20+ (frontend için - opsiyonel).
 
 1. Servisleri başlatın
 

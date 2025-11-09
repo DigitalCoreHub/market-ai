@@ -1,6 +1,6 @@
 module github.com/1batu/market-ai
 
-go 1.25.0
+go 1.24.0
 
 require (
 	github.com/dghubble/go-twitter v0.0.0-20221104224141-912508c3888b

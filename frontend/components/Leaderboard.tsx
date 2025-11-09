@@ -25,7 +25,7 @@ export default function Leaderboard() {
   const [lastHistoryFetch, setLastHistoryFetch] = useState<number>(0);
   // Fetch ROI history for all agents (typed)
   const fetchROIHistory = () => {
-    fetch('http://localhost:8080/api/v1/leaderboard/roi-history?limit=120')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'}/v1/leaderboard/roi-history?limit=120`)
       .then(r => r.json())
       .then((d: { success?: boolean; data?: unknown }) => {
         if (d.success && d.data && typeof d.data === 'object' && d.data !== null) {
@@ -51,7 +51,7 @@ export default function Leaderboard() {
       })
       .catch(() => {});
   };
-  useWebSocket('ws://localhost:8080/ws', {
+  useWebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws', {
     onMessage: (msg) => {
       if (msg.type === 'leaderboard_updated') {
         const data = msg.data;
@@ -83,7 +83,7 @@ export default function Leaderboard() {
   });
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/v1/leaderboard')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'}/v1/leaderboard`)
       .then(r => r.json())
       .then((d: { success?: boolean; data?: unknown }) => {
         if (d.data && Array.isArray(d.data)) {

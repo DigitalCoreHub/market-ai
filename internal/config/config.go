@@ -1,7 +1,9 @@
 package config
 
 import (
-	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -104,36 +106,103 @@ type AuthConfig struct {
 	APIKey    string // Master API key for authentication
 }
 
-// Load .env dosyasından konfigürasyonu yükler
+// parseDatabaseURL parses DATABASE_URL and returns DatabaseConfig
+// Supports both DATABASE_URL and individual DB_* variables
+func parseDatabaseURL() DatabaseConfig {
+	dbURL := viper.GetString("DATABASE_URL")
+	if dbURL != "" {
+		parsedURL, err := url.Parse(dbURL)
+		if err == nil {
+			host := parsedURL.Hostname()
+			port := parsedURL.Port()
+			if port == "" {
+				port = "5432"
+			}
+			user := parsedURL.User.Username()
+			password, _ := parsedURL.User.Password()
+			dbName := strings.TrimPrefix(parsedURL.Path, "/")
+			sslMode := "require"
+			if parsedURL.Query().Get("sslmode") != "" {
+				sslMode = parsedURL.Query().Get("sslmode")
+			}
+
+			return DatabaseConfig{
+				Host:     host,
+				Port:     port,
+				User:     user,
+				Password: password,
+				DBName:   dbName,
+				SSLMode:  sslMode,
+			}
+		}
+	}
+
+	// Fallback to individual variables
+	return DatabaseConfig{
+		Host:     viper.GetString("DB_HOST"),
+		Port:     viper.GetString("DB_PORT"),
+		User:     viper.GetString("DB_USER"),
+		Password: viper.GetString("DB_PASSWORD"),
+		DBName:   viper.GetString("DB_NAME"),
+		SSLMode:  viper.GetString("DB_SSLMODE"),
+	}
+}
+
+// parseRedisURL parses REDIS_URL and returns RedisConfig
+// Supports both REDIS_URL and individual REDIS_* variables
+func parseRedisURL() RedisConfig {
+	redisURL := viper.GetString("REDIS_URL")
+	if redisURL != "" {
+		parsedURL, err := url.Parse(redisURL)
+		if err == nil {
+			host := parsedURL.Hostname()
+			port := parsedURL.Port()
+			if port == "" {
+				port = "6379"
+			}
+			password, _ := parsedURL.User.Password()
+			db := 0
+			if parsedURL.Path != "" {
+				if dbNum, err := strconv.Atoi(strings.TrimPrefix(parsedURL.Path, "/")); err == nil {
+					db = dbNum
+				}
+			}
+
+			return RedisConfig{
+				Host:     host,
+				Port:     port,
+				Password: password,
+				DB:       db,
+			}
+		}
+	}
+
+	// Fallback to individual variables
+	return RedisConfig{
+		Host:     viper.GetString("REDIS_HOST"),
+		Port:     viper.GetString("REDIS_PORT"),
+		Password: viper.GetString("REDIS_PASSWORD"),
+		DB:       viper.GetInt("REDIS_DB"),
+	}
+}
+
+// Load .env dosyasından veya environment variables'dan konfigürasyonu yükler
 func Load() (*Config, error) {
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
+	viper.AutomaticEnv() // Environment variables'ları otomatik oku
 
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
+	// .env dosyası yoksa hata verme, sadece environment variables kullan
+	_ = viper.ReadInConfig() // Ignore error if .env file doesn't exist
 
 	config := &Config{
 		Server: ServerConfig{
 			Port: viper.GetString("PORT"),
 			Env:  viper.GetString("ENV"),
 		},
-		Database: DatabaseConfig{
-			Host:     viper.GetString("DB_HOST"),
-			Port:     viper.GetString("DB_PORT"),
-			User:     viper.GetString("DB_USER"),
-			Password: viper.GetString("DB_PASSWORD"),
-			DBName:   viper.GetString("DB_NAME"),
-			SSLMode:  viper.GetString("DB_SSLMODE"),
-		},
-		Redis: RedisConfig{
-			Host:     viper.GetString("REDIS_HOST"),
-			Port:     viper.GetString("REDIS_PORT"),
-			Password: viper.GetString("REDIS_PASSWORD"),
-			DB:       viper.GetInt("REDIS_DB"),
-		},
+		Database: parseDatabaseURL(),
+		Redis:    parseRedisURL(),
 		Log: LogConfig{
 			Level: viper.GetString("LOG_LEVEL"),
 		},

@@ -37,3 +37,6 @@ logs/
 
 # Docker
 docker-data/
+
+# Fly.io Credentials (hassas bilgiler içerir!)
+docs/flyio-database-credentials.md

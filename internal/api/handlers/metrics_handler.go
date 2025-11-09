@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/1batu/market-ai/internal/models"
 	"github.com/gofiber/fiber/v2"
@@ -55,4 +57,81 @@ func (h *MetricsHandler) Get(c *fiber.Ctx) error {
 	return c.JSON(models.Response{Success: true, Data: fiber.Map{
 		"data_sources": metrics,
 	}})
+}
+
+// GetPrometheus returns metrics in Prometheus format
+// GET /api/v1/metrics/prometheus
+func (h *MetricsHandler) GetPrometheus(c *fiber.Ctx) error {
+	var output []string
+
+	// Active agents count
+	var activeAgents int
+	h.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM agents WHERE status = 'active'").Scan(&activeAgents)
+	output = append(output, fmt.Sprintf("marketai_active_agents %d", activeAgents))
+
+	// Total trades count
+	var totalTrades int
+	h.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM trades").Scan(&totalTrades)
+	output = append(output, fmt.Sprintf("marketai_total_trades %d", totalTrades))
+
+	// Average trade latency (simplified - using created_at)
+	var avgLatency float64
+	h.db.QueryRow(context.Background(), `
+		SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))), 0)
+		FROM trades
+		WHERE created_at > NOW() - INTERVAL '1 hour'
+	`).Scan(&avgLatency)
+	output = append(output, fmt.Sprintf("marketai_avg_trade_latency_seconds %.2f", avgLatency))
+
+	// Reasoning logs per minute (simplified - using agent_decisions)
+	var decisionsPerMin float64
+	h.db.QueryRow(context.Background(), `
+		SELECT COALESCE(COUNT(*)::float / 60.0, 0)
+		FROM agent_decisions
+		WHERE created_at > NOW() - INTERVAL '1 minute'
+	`).Scan(&decisionsPerMin)
+	output = append(output, fmt.Sprintf("marketai_reasoning_logs_per_minute %.2f", decisionsPerMin))
+
+	// Data source metrics
+	rows, err := h.db.Query(context.Background(), `
+		SELECT source_name, success_count, error_count, avg_response_time_ms
+		FROM data_sources
+		WHERE is_active = true
+	`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var sourceName string
+			var successCount, errorCount, avgResponseTime int
+			rows.Scan(&sourceName, &successCount, &errorCount, &avgResponseTime)
+
+			// Sanitize source name for Prometheus (replace spaces with underscores)
+			sanitizedName := fmt.Sprintf("marketai_datasource_%s", sanitizeMetricName(sourceName))
+			output = append(output, fmt.Sprintf("%s_success_count %d", sanitizedName, successCount))
+			output = append(output, fmt.Sprintf("%s_error_count %d", sanitizedName, errorCount))
+			output = append(output, fmt.Sprintf("%s_avg_response_time_ms %d", sanitizedName, avgResponseTime))
+		}
+	}
+
+	// Add timestamp
+	output = append(output, fmt.Sprintf("# Timestamp: %d", time.Now().Unix()))
+
+	c.Set("Content-Type", "text/plain; version=0.0.4")
+	result := ""
+	for _, line := range output {
+		result += line + "\n"
+	}
+	return c.SendString(result)
+}
+
+func sanitizeMetricName(name string) string {
+	result := ""
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			result += string(r)
+		} else if r == ' ' {
+			result += "_"
+		}
+	}
+	return result
 }

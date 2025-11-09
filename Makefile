@@ -24,6 +24,24 @@ docker-down: ## Stop Docker services
 docker-logs: ## View Docker logs
 	docker-compose logs -f
 
+up: ## Alias for docker-up
+	docker-compose up -d
+
+down: ## Alias for docker-down
+	docker-compose down
+
+logs: ## Alias for docker-logs
+	docker-compose logs -f
+
+docker-build: ## Build Docker image
+	docker-compose build
+
+docker-restart: ## Restart Docker services
+	docker-compose restart
+
+docker-up-monitoring: ## Start Docker services with monitoring (Prometheus + Grafana)
+	docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
 db-migrate-006: ## Apply migration 006 (data sources) into running Postgres container
 	docker exec -i marketai-postgres psql -U marketai -d marketai_dev -f /docker-entrypoint-initdb.d/006_data_sources.sql
 

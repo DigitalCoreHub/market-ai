@@ -1,0 +1,377 @@
+openapi: 3.0.0
+info:
+  title: Market AI API
+  version: 1.0.0
+  description: AI tabanlı otonom trading simülasyon API'si
+  contact:
+    name: Market AI Team
+    email: support@marketai.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://market-ai.fly.dev
+    description: Production server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Sistem sağlık durumunu kontrol eder
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Sistem sağlıklı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Sistem sağlıksız
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/ping:
+    get:
+      summary: Ping endpoint
+      description: Basit connectivity test
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Pong response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /api/v1/auth/login:
+    post:
+      summary: API key login
+      description: API key ile login yapıp JWT token alır
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login başarılı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Geçersiz credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/agents:
+    get:
+      summary: Tüm ajanları listele
+      description: Aktif ve pasif tüm ajanları getirir
+      tags:
+        - Agents
+      responses:
+        '200':
+          description: Ajan listesi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentsResponse'
+
+  /api/v1/agents/{id}:
+    get:
+      summary: Ajan detayı
+      description: Belirli bir ajanın detaylarını getirir
+      tags:
+        - Agents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ajan detayı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          description: Ajan bulunamadı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/leaderboard:
+    get:
+      summary: Leaderboard
+      description: Ajan performans sıralaması
+      tags:
+        - Leaderboard
+      responses:
+        '200':
+          description: Leaderboard listesi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+
+  /api/v1/market/context:
+    get:
+      summary: Market context
+      description: Çok kaynaklı piyasa bağlamı (Yahoo + Scraper + Twitter)
+      tags:
+        - Market
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "THYAO,AKBNK,ASELS"
+      responses:
+        '200':
+          description: Market context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketContext'
+
+  /api/v1/metrics:
+    get:
+      summary: Metrics
+      description: Sistem metrikleri
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Metrics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+
+  /api/v1/metrics/prometheus:
+    get:
+      summary: Prometheus metrics
+      description: Prometheus formatında metrikler
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/universe/active:
+    get:
+      summary: Aktif hisseler
+      description: Dinamik evrendeki aktif hisseleri listeler
+      tags:
+        - Universe
+      responses:
+        '200':
+          description: Aktif hisse listesi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseResponse'
+
+  /api/v1/universe/update:
+    post:
+      summary: Universe güncelle
+      description: Hisse evrenini manuel olarak günceller (JWT gerekli)
+      tags:
+        - Universe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Universe güncellendi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Response:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+        error:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [healthy, unhealthy]
+            services:
+              type: object
+              additionalProperties: true
+
+    LoginRequest:
+      type: object
+      required:
+        - api_key
+      properties:
+        api_key:
+          type: string
+          description: Master API key for authentication
+          example: "your-api-key-here"
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+            type:
+              type: string
+              example: "Bearer"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+        current_balance:
+          type: number
+        initial_balance:
+          type: number
+
+    AgentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+
+    LeaderboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              rank:
+                type: integer
+              agent_name:
+                type: string
+              roi:
+                type: number
+              profit_loss:
+                type: number
+
+    MarketContext:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            prices:
+              type: array
+              items:
+                type: object
+            news:
+              type: array
+              items:
+                type: object
+            tweets:
+              type: array
+              items:
+                type: object
+            stock_sentiments:
+              type: object
+
+    MetricsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            data_sources:
+              type: array
+              items:
+                type: object
+
+    UniverseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: string
+

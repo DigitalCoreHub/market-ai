@@ -18,6 +18,7 @@ import (
 	"github.com/1batu/market-ai/internal/datasources/scraper"
 	tw "github.com/1batu/market-ai/internal/datasources/twitter"
 	"github.com/1batu/market-ai/internal/datasources/yahoo"
+	"github.com/1batu/market-ai/internal/middleware"
 	"github.com/1batu/market-ai/internal/services"
 	"github.com/1batu/market-ai/internal/websocket"
 	"github.com/1batu/market-ai/pkg/logger"
@@ -33,6 +34,10 @@ func main() {
 
 	logger.Init(cfg.Log.Level)
 	log.Info().Msg("Logger initialized")
+
+	// Initialize authentication
+	middleware.InitAuth(cfg.Auth.JWTSecret, cfg.Auth.APIKey)
+	log.Info().Msg("Authentication initialized")
 
 	db, err := database.NewPostgresPool(cfg.Database)
 	if err != nil {
@@ -228,8 +233,9 @@ func main() {
 	tradeHandler := handlers.NewTradeHandler(db, tradingEngine)
 	leaderboardHandler := handlers.NewLeaderboardHandler(db)
 	roiHistoryHandler := handlers.NewROIHistoryHandler(db)
+	authHandler := handlers.NewAuthHandler(cfg)
 
-	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, leaderboardHandler, roiHistoryHandler, marketCtxHandler, debugHandler, metricsHandler, universeHandler, hub)
+	api.SetupRoutes(app, healthHandler, agentHandler, stockHandler, tradeHandler, leaderboardHandler, roiHistoryHandler, marketCtxHandler, debugHandler, metricsHandler, universeHandler, authHandler, hub)
 
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)

@@ -30,6 +30,13 @@ Türkiye odaklı, çoklu veri kaynağı ve çoklu model desteği ile AI tabanlı
 - Güvenilirlik skorlaması ve metrikler (v0.5)
 - Çoklu model desteği: OpenAI, Anthropic, Google, DeepSeek, Groq/Llama, Mistral, XAI
 - PostgreSQL + Redis altyapısı, WebSocket yayınları
+- **v1.0: Production Ready**
+  - JWT + API Key authentication
+  - Rate limiting (60 req/min)
+  - Input validation
+  - Prometheus metrics & Grafana dashboards
+  - Dockerized deployment (Docker Compose)
+  - CI/CD pipeline (GitHub Actions)
 
 —
 
@@ -50,7 +57,15 @@ Türkiye odaklı, çoklu veri kaynağı ve çoklu model desteği ile AI tabanlı
 1. Servisleri başlatın
 
 ```bash
-docker-compose up -d  # PostgreSQL + Redis
+make up
+# veya
+docker-compose up -d  # PostgreSQL + Redis + App
+```
+
+**Not:** Local development için Prometheus ve Grafana varsayılan olarak kapalıdır. Gerekirse:
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
 2. Migrasyonları uygulayın (v0.5 veri kaynakları + v0.6 dinamik evren)
@@ -119,6 +134,11 @@ Opsiyonel
 - SYMBOL_UNIVERSE: Başlangıç/bağlam sembolleri (Dinamik evren açıkken opsiyoneldir)
 - LEADERBOARD_UPDATE_INTERVAL (varsayılan 60s)
 
+Authentication (v1.0)
+
+- JWT_SECRET: JWT token imzalama secret'ı (production'da mutlaka değiştir!)
+- API_KEY: Master API key (API key ile login yapıp JWT token almak için)
+
 Kaldırılan/Artık Kullanılmayan
 
 - AGENT_DECISION_INTERVAL_MIN/MAX, AGENT_MAX_RISK_PER_TRADE, AGENT_MAX_PORTFOLIO_RISK, AGENT_MIN_CONFIDENCE, AGENT_INITIAL_BALANCE → KULLANILMIYOR
@@ -127,11 +147,23 @@ Kaldırılan/Artık Kullanılmayan
 
 ## API Uç Noktaları (seçmece)
 
+Authentication (v1.0)
+
+- POST /api/v1/auth/login → API key ile login, JWT token al
+
+Public Endpoints
+
+- GET /health → Health check
+- GET /api/v1/ping → Ping test
 - GET /api/v1/market/context?symbols=THYAO,AKBNK
-- GET /api/v1/metrics
+- GET /api/v1/metrics, GET /api/v1/metrics/prometheus
 - GET /api/v1/debug/yahoo | /debug/scraper | /debug/tweets
 - GET /api/v1/leaderboard, GET /api/v1/leaderboard/roi-history
-- GET /api/v1/universe/active, POST /api/v1/universe/update, GET /api/v1/universe/history
+- GET /api/v1/universe/active, GET /api/v1/universe/history
+
+Protected Endpoints (API Key veya JWT Token gerekli)
+
+- POST /api/v1/universe/update → Hisse evrenini güncelle
 
 —
 

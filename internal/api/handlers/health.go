@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/1batu/market-ai/internal/models"
 	"github.com/gofiber/fiber/v2"
@@ -23,37 +25,57 @@ func NewHealthHandler(db *pgxpool.Pool, redis *redis.Client) *HealthHandler {
 
 // Check tüm servislerin sağlık durumunu kontrol eder (GET /health)
 func (h *HealthHandler) Check(c *fiber.Ctx) error {
-	services := make(map[string]string)
+	services := make(map[string]interface{})
+	ctx := context.Background()
 
-	if err := h.db.Ping(context.Background()); err != nil {
-		services["postgres"] = "unhealthy"
+	// PostgreSQL health check
+	dbStatus := "healthy"
+	var dbLatency int64
+	start := time.Now()
+	if err := h.db.Ping(ctx); err != nil {
+		dbStatus = "unhealthy"
 	} else {
-		services["postgres"] = "healthy"
+		dbLatency = time.Since(start).Milliseconds()
+	}
+	services["postgres"] = map[string]interface{}{
+		"status":  dbStatus,
+		"latency": fmt.Sprintf("%dms", dbLatency),
 	}
 
-	if err := h.redis.Ping(context.Background()).Err(); err != nil {
-		services["redis"] = "unhealthy"
+	// Redis health check
+	redisStatus := "healthy"
+	var redisLatency int64
+	start = time.Now()
+	if err := h.redis.Ping(ctx).Err(); err != nil {
+		redisStatus = "unhealthy"
 	} else {
-		services["redis"] = "healthy"
+		redisLatency = time.Since(start).Milliseconds()
+	}
+	services["redis"] = map[string]interface{}{
+		"status":  redisStatus,
+		"latency": fmt.Sprintf("%dms", redisLatency),
 	}
 
-	status := "healthy"
-	for _, v := range services {
-		if v == "unhealthy" {
-			status = "unhealthy"
-			break
-		}
+	// WebSocket hub status (always healthy if server is running)
+	services["websocket"] = map[string]interface{}{
+		"status": "healthy",
+		"note":   "Hub is running",
+	}
+
+	overallStatus := "healthy"
+	if dbStatus == "unhealthy" || redisStatus == "unhealthy" {
+		overallStatus = "unhealthy"
 	}
 
 	response := models.Response{
-		Success: status == "healthy",
+		Success: overallStatus == "healthy",
 		Data: models.HealthResponse{
-			Status:   status,
+			Status:   overallStatus,
 			Services: services,
 		},
 	}
 
-	if status == "unhealthy" {
+	if overallStatus == "unhealthy" {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(response)
 	}
 

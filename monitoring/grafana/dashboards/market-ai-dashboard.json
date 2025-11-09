@@ -1,0 +1,61 @@
+{
+  "dashboard": {
+    "title": "Market AI Dashboard",
+    "tags": ["market-ai", "trading"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active Agents",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "marketai_active_agents",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Total Trades",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "marketai_total_trades",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Average Trade Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "marketai_avg_trade_latency_seconds",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Reasoning Logs per Minute",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "marketai_reasoning_logs_per_minute",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 27,
+    "version": 1
+  }
+}
+

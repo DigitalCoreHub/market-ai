@@ -19,6 +19,7 @@ func SetupRoutes(
 	debugHandler *handlers.DebugDataHandler,
 	metricsHandler *handlers.MetricsHandler,
 	universeHandler *handlers.UniverseHandler,
+	newsHandler *handlers.NewsHandler,
 	authHandler *handlers.AuthHandler,
 	hub *websocket.Hub,
 ) {
@@ -63,6 +64,11 @@ func SetupRoutes(
 	universe.Get("/active", universeHandler.GetActiveStocks)
 	universe.Post("/update", middleware.APIKeyOrJWTProtected(), universeHandler.TriggerUniverseUpdate) // Protected (API key or JWT)
 	universe.Get("/history", universeHandler.GetUniverseHistory)
+
+	// News endpoints
+	news := v1.Group("/news")
+	news.Post("/fetch", middleware.APIKeyOrJWTProtected(), newsHandler.TriggerNewsFetch) // Protected (API key or JWT)
+	news.Get("/latest", newsHandler.GetLatestNews)                                       // Public
 
 	// Debug endpoints (per-source)
 	dbg := v1.Group("/debug")

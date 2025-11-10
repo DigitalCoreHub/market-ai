@@ -66,7 +66,7 @@ export function useMarketContext(symbols: string[], pollIntervalMs = 60000) {
   const fetchContext = () => {
     if (!symbols || symbols.length === 0) return;
     const param = symbols.join(',');
-    fetch(`http://localhost:8080/api/v1/market/context?symbols=${param}`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api'}/v1/market/context?symbols=${param}`)
       .then(r => r.json())
       .then((res: ResponseWrapper) => {
         if (res.success && res.data) {

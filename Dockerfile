@@ -23,6 +23,12 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/marketai .
 
+# Copy migrations directory (needed for embedded migrations)
+COPY --from=builder /app/migrations ./migrations
+
+# Create empty .env file (app looks for it, but will use environment variables from Fly.io secrets)
+RUN touch .env
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

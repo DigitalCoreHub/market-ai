@@ -1,7 +1,9 @@
 package config
 
 import (
-	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -104,43 +106,128 @@ type AuthConfig struct {
 	APIKey    string // Master API key for authentication
 }
 
-// Load .env dosyasından konfigürasyonu yükler
+// parseDatabaseURL parses DATABASE_URL and returns DatabaseConfig
+// Supports both DATABASE_URL and individual DB_* variables
+func parseDatabaseURL() DatabaseConfig {
+	dbURL := viper.GetString("DATABASE_URL")
+	if dbURL != "" {
+		parsedURL, err := url.Parse(dbURL)
+		if err == nil {
+			host := parsedURL.Hostname()
+			port := parsedURL.Port()
+			if port == "" {
+				port = "5432"
+			}
+			user := parsedURL.User.Username()
+			password, _ := parsedURL.User.Password()
+			dbName := strings.TrimPrefix(parsedURL.Path, "/")
+			sslMode := "require"
+			if parsedURL.Query().Get("sslmode") != "" {
+				sslMode = parsedURL.Query().Get("sslmode")
+			}
+
+			return DatabaseConfig{
+				Host:     host,
+				Port:     port,
+				User:     user,
+				Password: password,
+				DBName:   dbName,
+				SSLMode:  sslMode,
+			}
+		}
+	}
+
+	// Fallback to individual variables
+	return DatabaseConfig{
+		Host:     viper.GetString("DB_HOST"),
+		Port:     viper.GetString("DB_PORT"),
+		User:     viper.GetString("DB_USER"),
+		Password: viper.GetString("DB_PASSWORD"),
+		DBName:   viper.GetString("DB_NAME"),
+		SSLMode:  viper.GetString("DB_SSLMODE"),
+	}
+}
+
+// getIntWithDefault returns environment variable as int, or default value if not set or 0
+func getIntWithDefault(key string, defaultValue int) int {
+	value := viper.GetInt(key)
+	if value == 0 {
+		return defaultValue
+	}
+	return value
+}
+
+// getFloat64WithDefault returns environment variable as float64, or default value if not set or 0
+func getFloat64WithDefault(key string, defaultValue float64) float64 {
+	value := viper.GetFloat64(key)
+	if value == 0 {
+		return defaultValue
+	}
+	return value
+}
+
+// parseRedisURL parses REDIS_URL and returns RedisConfig
+// Supports both REDIS_URL and individual REDIS_* variables
+func parseRedisURL() RedisConfig {
+	redisURL := viper.GetString("REDIS_URL")
+	if redisURL != "" {
+		parsedURL, err := url.Parse(redisURL)
+		if err == nil {
+			host := parsedURL.Hostname()
+			port := parsedURL.Port()
+			if port == "" {
+				port = "6379"
+			}
+			password, _ := parsedURL.User.Password()
+			db := 0
+			if parsedURL.Path != "" {
+				if dbNum, err := strconv.Atoi(strings.TrimPrefix(parsedURL.Path, "/")); err == nil {
+					db = dbNum
+				}
+			}
+
+			return RedisConfig{
+				Host:     host,
+				Port:     port,
+				Password: password,
+				DB:       db,
+			}
+		}
+	}
+
+	// Fallback to individual variables
+	return RedisConfig{
+		Host:     viper.GetString("REDIS_HOST"),
+		Port:     viper.GetString("REDIS_PORT"),
+		Password: viper.GetString("REDIS_PASSWORD"),
+		DB:       viper.GetInt("REDIS_DB"),
+	}
+}
+
+// Load .env dosyasından veya environment variables'dan konfigürasyonu yükler
 func Load() (*Config, error) {
 	viper.SetConfigName(".env")
 	viper.SetConfigType("env")
 	viper.AddConfigPath(".")
-	viper.AutomaticEnv()
+	viper.AutomaticEnv() // Environment variables'ları otomatik oku
 
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
+	// .env dosyası yoksa hata verme, sadece environment variables kullan
+	_ = viper.ReadInConfig() // Ignore error if .env file doesn't exist
 
 	config := &Config{
 		Server: ServerConfig{
 			Port: viper.GetString("PORT"),
 			Env:  viper.GetString("ENV"),
 		},
-		Database: DatabaseConfig{
-			Host:     viper.GetString("DB_HOST"),
-			Port:     viper.GetString("DB_PORT"),
-			User:     viper.GetString("DB_USER"),
-			Password: viper.GetString("DB_PASSWORD"),
-			DBName:   viper.GetString("DB_NAME"),
-			SSLMode:  viper.GetString("DB_SSLMODE"),
-		},
-		Redis: RedisConfig{
-			Host:     viper.GetString("REDIS_HOST"),
-			Port:     viper.GetString("REDIS_PORT"),
-			Password: viper.GetString("REDIS_PASSWORD"),
-			DB:       viper.GetInt("REDIS_DB"),
-		},
+		Database: parseDatabaseURL(),
+		Redis:    parseRedisURL(),
 		Log: LogConfig{
 			Level: viper.GetString("LOG_LEVEL"),
 		},
 		News: NewsConfig{
 			APIKey:         viper.GetString("NEWS_API_KEY"),
-			UpdateInterval: viper.GetInt("NEWS_UPDATE_INTERVAL"),
-			CacheTTL:       viper.GetInt("NEWS_CACHE_TTL"),
+			UpdateInterval: getIntWithDefault("NEWS_UPDATE_INTERVAL", 30), // Default: 30 minutes
+			CacheTTL:       getIntWithDefault("NEWS_CACHE_TTL", 60),       // Default: 60 minutes
 			Feeds:          viper.GetString("RSS_FEEDS"),
 		},
 		AI: AIConfig{
@@ -148,8 +235,8 @@ func Load() (*Config, error) {
 			AnthropicKey: viper.GetString("ANTHROPIC_API_KEY"),
 			GPTModel:     viper.GetString("AI_MODEL_GPT"),
 			ClaudeModel:  viper.GetString("AI_MODEL_CLAUDE"),
-			Temperature:  viper.GetFloat64("AI_TEMPERATURE"),
-			MaxTokens:    viper.GetInt("AI_MAX_TOKENS"),
+			Temperature:  getFloat64WithDefault("AI_TEMPERATURE", 0.7), // Default: 0.7
+			MaxTokens:    getIntWithDefault("AI_MAX_TOKENS", 2000),   // Default: 2000
 
 			GoogleKey:     viper.GetString("GOOGLE_API_KEY"),
 			GoogleModel:   viper.GetString("AI_MODEL_GEMINI"),
@@ -167,13 +254,13 @@ func Load() (*Config, error) {
 			EnablePremiumModels: viper.GetBool("ENABLE_PREMIUM_MODELS"),
 		},
 		Leaderboard: LeaderboardConfig{
-			UpdateInterval: viper.GetInt("LEADERBOARD_UPDATE_INTERVAL"),
+			UpdateInterval: getIntWithDefault("LEADERBOARD_UPDATE_INTERVAL", 60), // Default: 60 seconds
 		},
 		DataSources: DataSourcesConfig{
-			YahooFetchInterval:      viper.GetInt("YAHOO_FETCH_INTERVAL"),
-			ScraperFetchInterval:    viper.GetInt("SCRAPER_FETCH_INTERVAL"),
-			TwitterFetchInterval:    viper.GetInt("TWITTER_FETCH_INTERVAL"),
-			SentimentUpdateInterval: viper.GetInt("SENTIMENT_UPDATE_INTERVAL"),
+			YahooFetchInterval:      getIntWithDefault("YAHOO_FETCH_INTERVAL", 300),      // Default: 5 minutes
+			ScraperFetchInterval:    getIntWithDefault("SCRAPER_FETCH_INTERVAL", 600),   // Default: 10 minutes
+			TwitterFetchInterval:    getIntWithDefault("TWITTER_FETCH_INTERVAL", 900),   // Default: 15 minutes
+			SentimentUpdateInterval: getIntWithDefault("SENTIMENT_UPDATE_INTERVAL", 1800), // Default: 30 minutes
 
 			TwitterAPIKey:       viper.GetString("TWITTER_API_KEY"),
 			TwitterAPISecret:    viper.GetString("TWITTER_API_SECRET"),
